@@ -37,6 +37,10 @@ if frontend_dist.exists():
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend-assets")
 
+    @app.get("/", include_in_schema=False)
+    def frontend_root():
+        return FileResponse(frontend_dist / "index.html")
+
     @app.get("/favicon.svg", include_in_schema=False)
     def frontend_favicon():
         favicon_path = frontend_dist / "favicon.svg"

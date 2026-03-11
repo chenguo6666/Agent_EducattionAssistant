@@ -1,4 +1,8 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
+const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+const isLocalBrowser = ["127.0.0.1", "localhost"].includes(window.location.hostname);
+const pointsToLocalBackend = Boolean(rawApiBaseUrl && /(127\.0\.0\.1|localhost)/.test(rawApiBaseUrl));
+
+const API_BASE_URL = !rawApiBaseUrl || (!isLocalBrowser && pointsToLocalBackend) ? window.location.origin : rawApiBaseUrl;
 
 type RequestMethod = "GET" | "POST";
 

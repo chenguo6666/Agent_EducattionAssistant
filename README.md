@@ -1,4 +1,4 @@
-﻿# 教育助手 AI Agent
+# 教育助手 AI Agent
 
 一个面向课程项目的全栈 Web 应用。用户在前端输入高层级教育任务，例如“总结这篇历史课文并生成 5 个选择题”，后端 Agent 负责识别意图、拆解任务、调用模拟工具，并将执行结果和状态反馈给前端。
 
@@ -11,8 +11,6 @@
 - 以 Scrum 形式推进，分 3 个 Sprint 逐步迭代。
 
 ## 2. 技术选型
-
-基于当前 backlog 和“从 0 开始、强调可落地演示”的目标，建议采用下面的组合：
 
 - 前端：Vue 3 + Vite + TypeScript + Vue Router
 - 状态管理：Pinia
@@ -34,8 +32,6 @@
 - Sprint 2：增加工具执行过程展示、参数化控制、模板任务、内容导出、异常提示
 - Sprint 3：增加文件上传、简单 RAG、多轮记忆、错题推荐、重新生成
 
-当前优先级：只锁定 Sprint 1 的架构和实现边界，避免一开始把 Sprint 2/3 的复杂度提前带入。
-
 ## 4. Sprint 1 MVP 范围
 
 - 用户注册/登录
@@ -53,50 +49,14 @@
   - `completed`
   - `failed`
 
-## 5. 建议仓库结构
-
-```text
-Agent_EducattionAssistant/
-├─ frontend/                # Vue 前端
-├─ backend/                 # FastAPI 后端
-├─ docs/                    # 前期准备与设计文档
-├─ 产品待办列表.xlsx
-├─ sprint1产品代办列表.xlsx
-└─ README.md
-```
-
-后续代码阶段建议扩展为：
-
-```text
-frontend/
-├─ src/
-│  ├─ api/
-│  ├─ components/
-│  ├─ pages/
-│  ├─ stores/
-│  ├─ router/
-│  └─ types/
-
-backend/
-├─ app/
-│  ├─ api/
-│  ├─ core/
-│  ├─ agent/
-│  ├─ tools/
-│  ├─ models/
-│  ├─ schemas/
-│  └─ services/
-└─ tests/
-```
-
-## 6. 当前文档
+## 5. 当前文档
 
 - [项目准备说明](E:/project/codex/Agent_EducattionAssistant/docs/project-preparation.md)
 - [Sprint1 执行计划](E:/project/codex/Agent_EducattionAssistant/docs/sprint1-plan.md)
 - [Sprint1 演示脚本](E:/project/codex/Agent_EducattionAssistant/docs/sprint1-demo-script.md)
 - [Sprint1 验收清单](E:/project/codex/Agent_EducattionAssistant/docs/sprint1-acceptance.md)
 
-## 7. 当前完成度
+## 6. 当前完成度
 
 Sprint 1 当前已完成的能力：
 
@@ -110,7 +70,7 @@ Sprint 1 当前已完成的能力：
 - Windows 下的一键联调启动与检查脚本
 - 后端最小自动化验收测试
 
-## 8. 本地启动
+## 7. 本地启动
 
 ### 前端
 
@@ -140,8 +100,6 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ### 一键联调启动
 
-如果你希望在 Windows 下直接拉起前后端并做联调检查，可以使用仓库内脚本：
-
 ```powershell
 .\scripts\dev-up.ps1
 .\scripts\dev-check.ps1
@@ -153,6 +111,28 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - [dev-up.ps1](E:/project/codex/Agent_EducattionAssistant/scripts/dev-up.ps1)：后台启动前后端，并把日志写入 `.runtime/logs/`
 - [dev-check.ps1](E:/project/codex/Agent_EducattionAssistant/scripts/dev-check.ps1)：通过真实 HTTP 请求验证注册、登录、鉴权和聊天接口
 - [dev-down.ps1](E:/project/codex/Agent_EducattionAssistant/scripts/dev-down.ps1)：停止 `dev-up` 启动的两个进程
+
+## 8. 临时公网访问
+
+如果你需要让队友直接通过链接访问当前版本，可以使用单端口生产模式：
+
+```powershell
+.\scripts\start-production.ps1
+```
+
+它会先构建前端，再由 FastAPI 直接托管 `frontend/dist`。
+
+然后在另一个终端执行：
+
+```powershell
+.\scripts\share-public.ps1
+```
+
+脚本会通过 `localtunnel` 生成一个临时公网链接。说明：
+
+- 这是临时公开访问方案，不是持久云部署
+- 你的电脑和进程必须保持在线，链接才可访问
+- 队友访问时使用 `share-public.ps1` 输出的公网地址
 
 ## 9. Sprint 1 验收
 
@@ -198,4 +178,4 @@ git status --short
 
 - `.runtime/` 已加入忽略，不需要提交联调日志
 - `frontend/dist/`、`node_modules/`、`backend/.venv/` 不应提交
-- 如果只提交项目源码与文档，当前最核心的目录是 `frontend/`、`backend/`、`docs/`、`scripts/`
+- `frontend/.env`、`backend/.env`、`.cursorindexingignore` 不应提交

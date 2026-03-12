@@ -5,6 +5,7 @@ from app.services.status import STATUS_ANALYZING, STATUS_COMPLETED, STATUS_EXECU
 from app.agent.planner import TaskPlanner
 from app.tools.quiz_tool import generate_quiz
 from app.tools.summary_tool import summarize_text
+from app.tools.text_tools import translate_text, polish_text, explain_term, compare_items
 
 
 class ChatService:
@@ -15,12 +16,29 @@ class ChatService:
         plan = self.planner.plan(message)
         summary = None
         quiz = None
+        translation = None
+        polish = None
+        explanation = None
+        comparison = None
 
+        # 根据意图调用相应的工具
         if plan.intent in {"summary", "summary_and_quiz", "unknown"}:
             summary = summarize_text(message)
 
         if plan.intent in {"quiz", "summary_and_quiz"}:
             quiz = generate_quiz(message, count=5 if "5" in message else 3)
+
+        if plan.intent == "translation":
+            translation = translate_text(message)
+
+        if plan.intent == "polish":
+            polish = polish_text(message)
+
+        if plan.intent == "explanation":
+            explanation = explain_term(message)
+
+        if plan.intent == "comparison":
+            comparison = compare_items(message)
 
         timeline = [
             TaskStage(status=STATUS_SUBMITTED, label="任务已提交"),
@@ -35,5 +53,12 @@ class ChatService:
             status=STATUS_COMPLETED,
             steps=plan.steps,
             timeline=timeline,
-            result=ChatResult(summary=summary, quiz=quiz),
+            result=ChatResult(
+                summary=summary, 
+                quiz=quiz,
+                translation=translation,
+                polish=polish,
+                explanation=explanation,
+                comparison=comparison,
+            ),
         )

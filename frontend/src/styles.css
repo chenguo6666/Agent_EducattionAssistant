@@ -376,6 +376,62 @@ textarea {
   margin: 12px 0 0;
 }
 
+/* Markdown 内容样式 */
+.result-text-content {
+  margin: 12px 0 0;
+  color: #223243;
+  line-height: 1.7;
+}
+
+.result-text-content h1,
+.result-text-content h2,
+.result-text-content h3,
+.result-text-content h4 {
+  margin: 16px 0 8px;
+  color: #15202b;
+}
+
+.result-text-content p {
+  margin: 8px 0;
+}
+
+.result-text-content ul,
+.result-text-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.result-text-content li {
+  margin: 4px 0;
+}
+
+.result-text-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 14px;
+}
+
+.result-text-content th,
+.result-text-content td {
+  padding: 10px 12px;
+  border: 1px solid rgba(31, 111, 235, 0.15);
+  text-align: left;
+}
+
+.result-text-content th {
+  background: rgba(31, 111, 235, 0.08);
+  font-weight: 600;
+}
+
+.result-text-content tr:nth-child(even) {
+  background: rgba(31, 111, 235, 0.04);
+}
+
+.result-text-content strong {
+  color: var(--primary-dark);
+}
+
 .error-card {
   border-color: rgba(180, 35, 24, 0.14);
   background: linear-gradient(180deg, #fff9f8 0%, #fff3f1 100%);

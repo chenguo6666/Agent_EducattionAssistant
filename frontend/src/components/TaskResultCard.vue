@@ -8,6 +8,7 @@
       <span class="result-card-intent">{{ intentLabel }}</span>
     </header>
 
+    <!-- 摘要结果 -->
     <section v-if="result.summary" class="result-section">
       <div class="result-section-header">
         <h4>摘要结果</h4>
@@ -15,6 +16,7 @@
       <p class="result-summary">{{ result.summary }}</p>
     </section>
 
+    <!-- 题目结果 -->
     <section v-if="result.quiz?.length" class="result-section">
       <div class="result-section-header">
         <h4>题目结果</h4>
@@ -39,11 +41,44 @@
         </article>
       </div>
     </section>
+
+    <!-- 翻译结果 -->
+    <section v-if="result.translation" class="result-section">
+      <div class="result-section-header">
+        <h4>翻译结果</h4>
+      </div>
+      <div class="result-text-content" v-html="renderMarkdown(result.translation)"></div>
+    </section>
+
+    <!-- 润色结果 -->
+    <section v-if="result.polish" class="result-section">
+      <div class="result-section-header">
+        <h4>润色结果</h4>
+      </div>
+      <div class="result-text-content" v-html="renderMarkdown(result.polish)"></div>
+    </section>
+
+    <!-- 解释结果 -->
+    <section v-if="result.explanation" class="result-section">
+      <div class="result-section-header">
+        <h4>词义解释</h4>
+      </div>
+      <div class="result-text-content" v-html="renderMarkdown(result.explanation)"></div>
+    </section>
+
+    <!-- 对比分析结果 -->
+    <section v-if="result.comparison" class="result-section">
+      <div class="result-section-header">
+        <h4>对比分析</h4>
+      </div>
+      <div class="result-text-content" v-html="renderMarkdown(result.comparison)"></div>
+    </section>
   </article>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { marked } from "marked";
 import type { ChatResult } from "@/types/chat";
 
 const props = defineProps<{
@@ -52,9 +87,13 @@ const props = defineProps<{
 }>();
 
 const intentMap: Record<string, string> = {
-  summary: "仅摘要",
-  quiz: "仅出题",
+  summary: "文本摘要",
+  quiz: "选择题生成",
   summary_and_quiz: "摘要 + 出题",
+  translation: "翻译",
+  polish: "内容润色",
+  explanation: "词义解释",
+  comparison: "对比分析",
   unknown: "兜底处理",
 };
 
@@ -62,5 +101,9 @@ const intentLabel = computed(() => intentMap[props.intent] ?? props.intent);
 
 function optionLetter(index: number) {
   return String.fromCharCode(65 + index);
+}
+
+function renderMarkdown(text: string): string {
+  return marked.parse(text) as string;
 }
 </script>

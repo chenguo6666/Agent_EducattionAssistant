@@ -31,6 +31,10 @@ class TaskStage(BaseModel):
 class ChatResult(BaseModel):
     summary: str | None = None
     quiz: list[QuizItem] | None = None
+    translation: str | None = None
+    polish: str | None = None
+    explanation: str | None = None
+    comparison: str | None = None
 
 
 class ChatResponse(BaseModel):

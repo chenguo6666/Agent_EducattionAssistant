@@ -191,6 +191,31 @@ const presetTemplates = [
     description: "适合课前预习和考前梳理",
     prompt: "请根据这段内容生成一份结构化复习提纲：",
   },
+  {
+    label: "中英翻译",
+    description: "中英文互译，支持学术词汇",
+    prompt: "请将以下内容翻译成英文：",
+  },
+  {
+    label: "文本摘要",
+    description: "将长文本压缩为简短摘要",
+    prompt: "请为以下内容生成一个简洁的摘要（50字以内）：",
+  },
+  {
+    label: "内容润色",
+    description: "改进表达，使内容更流畅",
+    prompt: "请帮我润色以下内容，使表达更加准确流畅：",
+  },
+  {
+    label: "词义解释",
+    description: "解释专业术语或成语含义",
+    prompt: "请解释以下词语的含义并给出例句：",
+  },
+  {
+    label: "对比分析",
+    description: "对比分析两个概念或事物",
+    prompt: "请对比分析以下两个概念的区别与联系：",
+  },
 ];
 
 const stageLabelMap: Record<TaskStatus, string> = {

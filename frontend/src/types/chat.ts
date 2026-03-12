@@ -14,6 +14,10 @@ export interface QuizItem {
 export interface ChatResult {
   summary?: string;
   quiz?: QuizItem[];
+  translation?: string;
+  polish?: string;
+  explanation?: string;
+  comparison?: string;
 }
 
 export interface ChatResponse {

@@ -95,7 +95,15 @@ async function loginAndRedirect(account: string, password: string) {
     password,
   });
   authStore.setSession(response);
-  await router.push("/chat");
+  
+  // Show success toast before redirecting
+  showToast("登录成功！正在进入工作台...", "success");
+  
+  // Delay redirect to show toast
+  setTimeout(async () => {
+    hideToast();
+    await router.push("/chat");
+  }, 1500);
 }
 
 async function handleSubmit() {

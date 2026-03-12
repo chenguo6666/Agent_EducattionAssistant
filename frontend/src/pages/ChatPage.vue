@@ -1,5 +1,12 @@
 ﻿<template>
   <main class="chat-layout">
+    <ToastNotification
+      :visible="toastVisible"
+      :message="toastMessage"
+      :type="toastType"
+      @close="toastVisible = false"
+    />
+    
     <aside class="sidebar-card">
       <p class="eyebrow">教育场景 Agent</p>
       <h1>对话工作台</h1>
@@ -125,6 +132,7 @@ import { executeTask } from "@/api/chat";
 import MessageBubble from "@/components/MessageBubble.vue";
 import TaskErrorCard from "@/components/TaskErrorCard.vue";
 import TaskResultCard from "@/components/TaskResultCard.vue";
+import ToastNotification from "@/components/ToastNotification.vue";
 import { useAuthStore } from "@/stores/auth";
 import type { ChatResponse, ChatResult, TaskStage, TaskStatus } from "@/types/chat";
 
@@ -142,6 +150,11 @@ interface MessageItem {
 
 const router = useRouter();
 const authStore = useAuthStore();
+
+// Toast state
+const toastVisible = ref(false);
+const toastMessage = ref("");
+const toastType = ref<"success" | "error" | "info">("info");
 
 const draft = ref("总结这篇历史课文并生成 5 个选择题：工业革命促进了生产力发展，也带来了社会结构的变化。");
 const submitting = ref(false);
@@ -393,6 +406,14 @@ async function handleSubmit() {
 
 onMounted(() => {
   validateSession();
+  
+  // Check if user just logged in, show success toast
+  if (sessionStorage.getItem('loginSuccess') === 'true') {
+    sessionStorage.removeItem('loginSuccess');
+    toastMessage.value = `欢迎回来，${authStore.username || '用户'}！`;
+    toastType.value = "success";
+    toastVisible.value = true;
+  }
 });
 
 onBeforeUnmount(() => {

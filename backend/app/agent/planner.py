@@ -29,4 +29,6 @@ class TaskPlanner:
             return PlanResult(intent="quiz", steps=["识别任务类型：出题", "调用出题工具"])
         if has_material and has_question:
             return PlanResult(intent="rag_answer", steps=["识别任务类型：资料追问", "检索相关资料片段", "生成基于资料的回答"])
-        return PlanResult(intent="unknown", steps=["未识别出明确任务，回退到摘要工具"])
+        if not has_material:
+            return PlanResult(intent="assistant_chat", steps=["识别任务类型：自由对话", "调用通用助手回复"])
+        return PlanResult(intent="summary", steps=["识别任务类型：资料总结", "调用摘要工具"])

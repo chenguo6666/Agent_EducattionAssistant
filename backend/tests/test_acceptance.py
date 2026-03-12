@@ -127,6 +127,19 @@ class AcceptanceTestCase(unittest.TestCase):
         self.assertEqual(mistakes_response.status_code, 200)
         self.assertGreaterEqual(len(mistakes_response.json()["items"]), 1)
 
+    def test_chat_without_document_returns_direct_assistant_reply(self):
+        _, headers = self.create_user_and_login()
+
+        response = self.client.post(
+            "/api/chat/execute",
+            headers=headers,
+            json={"message": "你好，我想准备下周的历史考试，先给我一点复习建议。"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["intent"], "assistant_chat")
+        self.assertTrue(payload["result"]["answer"])
+
     def test_invalid_token_returns_401(self):
         response = self.client.get("/api/auth/me", headers={"Authorization": "Bearer invalid-token"})
         self.assertEqual(response.status_code, 401)

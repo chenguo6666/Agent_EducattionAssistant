@@ -1,132 +1,116 @@
 <template>
-  <main class="chat-layout">
-    <aside class="sidebar-card">
-      <div>
-        <p class="eyebrow">教育场景 Agent</p>
-        <h1>对话工作台</h1>
-        <p class="muted">当前阶段已支持资料上传、轻量 RAG、结果导出和错题整理。</p>
+  <main class="chat-layout chatgpt-shell" :class="{ 'sidebar-open': isSidebarOpen }">
+    <button v-if="!isSidebarOpen" class="sidebar-toggle floating-toggle" type="button" @click="toggleSidebar">
+      菜单
+    </button>
+    <div v-if="isSidebarOpen" class="sidebar-backdrop" @click="closeSidebar"></div>
+
+    <aside class="sidebar-card chatgpt-sidebar" :class="{ open: isSidebarOpen }">
+      <div class="sidebar-top">
+        <div class="sidebar-toolbar">
+          <button class="secondary-button sidebar-new-chat" type="button" @click="startNewSession">+ 新建对话</button>
+          <button class="icon-action-button sidebar-close" type="button" @click="closeSidebar">收起</button>
+        </div>
+
+        <section class="sidebar-section">
+          <p class="sidebar-section-title">历史会话</p>
+          <p v-if="sessionError" class="inline-feedback">{{ sessionError }}</p>
+          <div v-if="loadingSessions" class="session-empty">正在加载会话...</div>
+          <div v-else-if="sessions.length === 0" class="session-empty">还没有历史会话，直接提问即可创建。</div>
+          <div v-else class="session-list">
+            <button
+              v-for="session in sessions"
+              :key="session.sessionId"
+              class="session-item"
+              :class="{ active: session.sessionId === activeSessionId }"
+              type="button"
+              @click="openSession(session.sessionId)"
+            >
+              <strong>{{ session.title }}</strong>
+              <span>{{ session.lastMessage || "暂无消息" }}</span>
+              <small>{{ formatSessionTime(session.updatedAt) }}</small>
+            </button>
+          </div>
+        </section>
+
+        <details class="sidebar-disclosure">
+          <summary>Agent 面板</summary>
+          <div class="sidebar-disclosure-content">
+            <div class="agent-strip-group">
+              <span class="status-label">执行阶段</span>
+              <div class="agent-strip-pills">
+                <span
+                  v-for="stage in stageCards"
+                  :key="stage.status"
+                  class="stage-pill"
+                  :class="stage.stateClass"
+                >
+                  {{ stage.title }} · {{ stage.stateLabel }}
+                </span>
+              </div>
+            </div>
+            <div class="agent-strip-group">
+              <span class="status-label">执行计划</span>
+              <div class="plan-inline">
+                <span v-for="step in planSteps" :key="step" class="plan-inline-item">{{ step }}</span>
+                <span v-if="planSteps.length === 0" class="plan-inline-item muted">等待任务分析</span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <section class="sidebar-section">
+          <div class="session-panel-header">
+            <p class="sidebar-section-title">最近错题</p>
+            <span class="muted">{{ mistakes.length }} 条</span>
+          </div>
+          <div v-if="mistakes.length === 0" class="session-empty">提交选择题作答后，答错的题会记录在这里。</div>
+          <div v-else class="mistake-list compact-list">
+            <article v-for="mistake in mistakes" :key="mistake.id" class="mistake-item">
+              <strong>{{ mistake.question }}</strong>
+              <p>你的答案：{{ mistake.userAnswer }}，正确答案：{{ mistake.correctAnswer }}</p>
+              <small v-if="mistake.sourceExcerpt">{{ mistake.sourceExcerpt }}</small>
+            </article>
+          </div>
+        </section>
       </div>
 
-      <div class="status-panel hero-status-panel">
-        <div>
+      <div class="sidebar-bottom">
+        <div class="sidebar-meta">
           <span class="status-label">当前用户</span>
           <strong>{{ authStore.username || "未命名用户" }}</strong>
         </div>
-        <div>
-          <span class="status-label">任务状态</span>
-          <strong>{{ currentStatusLabel }}</strong>
-        </div>
-        <div>
+        <div class="sidebar-meta">
           <span class="status-label">当前会话</span>
           <strong>{{ activeSessionTitle }}</strong>
         </div>
-        <div>
+        <div class="sidebar-meta">
+          <span class="status-label">任务状态</span>
+          <strong>{{ currentStatusLabel }}</strong>
+        </div>
+        <div class="sidebar-meta">
           <span class="status-label">识别意图</span>
           <strong>{{ intent || "等待提交" }}</strong>
         </div>
+        <button class="secondary-button sidebar-logout" type="button" @click="logout">退出登录</button>
       </div>
-
-      <div class="session-panel">
-        <div class="session-panel-header">
-          <p class="status-label">历史会话</p>
-          <button class="secondary-button compact-button" type="button" @click="startNewSession">新建会话</button>
-        </div>
-        <p v-if="sessionError" class="inline-feedback">{{ sessionError }}</p>
-        <div v-if="loadingSessions" class="session-empty">会话加载中...</div>
-        <div v-else-if="sessions.length === 0" class="session-empty">还没有历史会话，先发送一条任务或上传资料即可创建。</div>
-        <div v-else class="session-list">
-          <button
-            v-for="session in sessions"
-            :key="session.sessionId"
-            class="session-item"
-            :class="{ active: session.sessionId === activeSessionId }"
-            type="button"
-            @click="openSession(session.sessionId)"
-          >
-            <strong>{{ session.title }}</strong>
-            <span>{{ session.lastMessage || "暂无消息" }}</span>
-            <small>{{ formatSessionTime(session.updatedAt) }}</small>
-          </button>
-        </div>
-      </div>
-
-      <div class="document-panel">
-        <div class="session-panel-header">
-          <p class="status-label">会话资料</p>
-          <label class="secondary-button compact-button upload-button">
-            上传资料
-            <input
-              class="file-input"
-              type="file"
-              accept=".txt,.md,.pdf,.docx"
-              :disabled="uploadingDocument"
-              @change="handleFileChange"
-            />
-          </label>
-        </div>
-        <p class="muted">支持 txt、md、pdf、docx。上传后会自动分块、检索并作为当前会话上下文。</p>
-        <p v-if="documentFeedback" class="inline-feedback" :class="{ success: documentFeedbackType === 'success' }">
-          {{ documentFeedback }}
-        </p>
-        <div v-if="documents.length === 0" class="session-empty">当前会话还没有上传资料。</div>
-        <div v-else class="document-list">
-          <article v-for="document in documents" :key="document.documentId" class="document-item">
-            <div class="document-item-header">
-              <strong>{{ document.fileName }}</strong>
-              <span class="stage-pill">{{ document.fileType.toUpperCase() }}</span>
-            </div>
-            <p>{{ document.snippet || "资料已上传，等待解析内容展示。" }}</p>
-          </article>
-        </div>
-      </div>
-
-      <div class="mistake-panel">
-        <div class="session-panel-header">
-          <p class="status-label">错题本</p>
-          <span class="muted">最近 {{ mistakes.length }} 条</span>
-        </div>
-        <div v-if="mistakes.length === 0" class="session-empty">提交题目作答后，答错的题会自动记录在这里。</div>
-        <div v-else class="mistake-list">
-          <article v-for="mistake in mistakes" :key="mistake.id" class="mistake-item">
-            <strong>{{ mistake.question }}</strong>
-            <p>你的答案：{{ mistake.userAnswer }}，正确答案：{{ mistake.correctAnswer }}</p>
-            <small v-if="mistake.sourceExcerpt">{{ mistake.sourceExcerpt }}</small>
-          </article>
-        </div>
-      </div>
-
-      <div>
-        <p class="status-label">Agent 阶段</p>
-        <div class="stage-list">
-          <article
-            v-for="stage in stageCards"
-            :key="stage.status"
-            class="stage-card"
-            :class="stage.stateClass"
-          >
-            <div class="stage-card-header">
-              <strong>{{ stage.title }}</strong>
-              <span class="stage-pill">{{ stage.stateLabel }}</span>
-            </div>
-            <p class="stage-card-detail">{{ stage.detail }}</p>
-          </article>
-        </div>
-      </div>
-
-      <div>
-        <p class="status-label">执行计划</p>
-        <ul class="step-list">
-          <li v-for="step in planSteps" :key="step">{{ step }}</li>
-          <li v-if="planSteps.length === 0">等待任务分析</li>
-        </ul>
-      </div>
-
-      <button class="secondary-button" type="button" @click="logout">退出登录</button>
     </aside>
 
-    <section class="chat-card">
-      <div class="message-list">
-        <div v-if="loadingHistory" class="session-empty">会话内容加载中...</div>
+    <section class="chat-card chatgpt-main">
+      <header class="chatgpt-header compact-topbar">
+        <div class="topbar-title">
+          <button class="icon-action-button sidebar-toggle-inline" type="button" @click="toggleSidebar">菜单</button>
+          <strong>Education Assistant</strong>
+          <span class="muted">教育助手 AI Agent</span>
+        </div>
+        <div class="header-badges">
+          <span class="stage-pill">{{ documents.length > 0 ? "资料模式" : "自由聊天" }}</span>
+          <span class="stage-pill">{{ intent || "等待指令" }}</span>
+        </div>
+      </header>
+
+      <div ref="messageListRef" class="message-list chatgpt-message-list">
+        <div v-if="loadingHistory" class="chat-area-empty">正在加载对话内容...</div>
         <template v-else v-for="message in messages" :key="message.id">
           <MessageBubble v-if="message.kind === 'text'" :role="message.role" :content="message.content ?? ''" />
           <TaskResultCard
@@ -135,68 +119,85 @@
             :result="message.result!"
             :sources="message.sources ?? []"
             :quiz-feedback="message.quizFeedback"
+            @copy="handleCopy(message)"
             @export="handleExport(message.recordId)"
+            @retry="retryMessage(message)"
             @submit-quiz="handleQuizSubmit(message.recordId, $event)"
           />
           <TaskErrorCard
             v-else
             :message="message.errorMessage ?? '请求失败'"
-            :hint="message.errorHint ?? '请检查任务描述后重试。'"
+            :hint="message.errorHint ?? '请检查输入后重试。'"
           />
         </template>
       </div>
 
-      <form class="chat-form" @submit.prevent="handleSubmit">
-        <div class="template-panel">
-          <div class="template-panel-header">
-            <p class="status-label">预设任务模板</p>
-            <span class="muted">点击后自动填充输入框</span>
-          </div>
-          <div class="template-grid">
-            <button
-              v-for="template in presetTemplates"
-              :key="template.label"
-              class="template-chip"
-              type="button"
-              @click="applyTemplate(template.prompt)"
-            >
-              <strong>{{ template.label }}</strong>
-              <span>{{ template.description }}</span>
-            </button>
-          </div>
-        </div>
+      <div class="chatgpt-composer-wrap">
+        <form class="chat-form chatgpt-form compact-composer" @submit.prevent="handleSubmit">
+          <p v-if="composerNotice" class="inline-feedback success">{{ composerNotice }}</p>
+          <p v-if="composerError" class="inline-feedback">{{ composerError }}</p>
 
-        <div v-if="documents.length > 0" class="context-banner">
-          当前会话已挂载 {{ documents.length }} 份资料，本次任务会自动进行检索并基于相关片段执行。
-        </div>
+          <div class="composer-controls">
+            <div class="composer-toolbar">
+              <label class="icon-action-button composer-add-button" :class="{ loading: uploadingDocument }">
+                <span>{{ uploadingDocument ? "..." : "+" }}</span>
+                <input
+                  class="file-input"
+                  type="file"
+                  accept=".txt,.md,.pdf,.docx"
+                  :disabled="uploadingDocument"
+                  @change="handleFileChange"
+                />
+              </label>
+              <select v-model="selectedTemplate" class="template-select" @change="handleTemplateSelect">
+                <option value="">快捷任务</option>
+                <option v-for="template in presetTemplates" :key="template.label" :value="template.label">
+                  {{ template.label }}
+                </option>
+              </select>
+            </div>
 
-        <p v-if="composerError" class="inline-feedback">{{ composerError }}</p>
-        <textarea
-          v-model="draft"
-          rows="5"
-          placeholder="例如：工业革命带来了哪些社会问题？请根据当前资料回答。"
-        />
-        <div class="chat-actions">
-          <span class="muted">支持资料追问、摘要生成、出题和复习提纲。</span>
-          <div class="chat-action-buttons">
-            <button v-if="canRetryLastTask" class="secondary-button" type="button" @click="retryLastTask">
-              重试上次任务
-            </button>
-            <button class="primary-button" type="submit" :disabled="submitting || checkingSession || loadingHistory">
-              {{ checkingSession ? "校验登录中..." : submitting ? "处理中..." : "发送任务" }}
-            </button>
+            <div v-if="documents.length > 0" class="composer-document-row">
+              <span class="composer-document-label">资料</span>
+              <div class="composer-document-list">
+                <span v-for="document in documents" :key="document.documentId" class="composer-document-chip">
+                  {{ document.fileName }}
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
-      </form>
+
+          <textarea v-model="draft" rows="1" placeholder="有问题，尽管问" />
+
+          <div class="chat-actions">
+            <span class="muted">支持自由对话、资料追问、摘要生成、题目生成和结果导出。</span>
+            <div class="chat-action-buttons">
+              <button v-if="canRetryLastTask" class="secondary-button compact-button" type="button" @click="retryLastTask">
+                重新回答
+              </button>
+              <button class="primary-button compact-send-button" type="submit" :disabled="submitting || checkingSession || loadingHistory">
+                {{ checkingSession ? "校验中..." : submitting ? "思考中..." : "发送" }}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { fetchMe } from "@/api/auth";
-import { executeTask, exportTaskResult, fetchMistakes, fetchSessionDetail, fetchSessions, submitQuizAttempt } from "@/api/chat";
+import {
+  executeTask,
+  exportTaskResult,
+  fetchMistakes,
+  fetchSessionDetail,
+  fetchSessions,
+  submitQuizAttempt,
+} from "@/api/chat";
 import { uploadDocument } from "@/api/documents";
 import MessageBubble from "@/components/MessageBubble.vue";
 import TaskErrorCard from "@/components/TaskErrorCard.vue";
@@ -222,6 +223,7 @@ interface MessageItem {
   kind: MessageKind;
   recordId?: number;
   content?: string;
+  prompt?: string;
   result?: ChatResult;
   sources?: RetrievedChunk[];
   quizFeedback?: string;
@@ -232,10 +234,13 @@ interface MessageItem {
 
 const router = useRouter();
 const authStore = useAuthStore();
+const messageListRef = ref<HTMLElement | null>(null);
 
-const defaultDraft = "请根据当前资料总结重点，并生成 5 个选择题帮助我复习。";
+const defaultDraft = "";
+const isSidebarOpen = ref(window.innerWidth > 1080);
 
 const draft = ref(defaultDraft);
+const selectedTemplate = ref("");
 const submitting = ref(false);
 const uploadingDocument = ref(false);
 const checkingSession = ref(true);
@@ -247,6 +252,7 @@ const planSteps = ref<string[]>([]);
 const currentStatusLabel = ref("等待提交");
 const progressTimers: number[] = [];
 const composerError = ref("");
+const composerNotice = ref("");
 const lastSubmittedMessage = ref("");
 const sessionError = ref("");
 const documentFeedback = ref("");
@@ -255,23 +261,23 @@ const sessions = ref<ChatSessionSummary[]>([]);
 const documents = ref<DocumentSummary[]>([]);
 const mistakes = ref<MistakeItem[]>([]);
 const activeSessionId = ref("");
-const activeSessionTitle = ref("新会话");
+const activeSessionTitle = ref("新对话");
 const messages = ref<MessageItem[]>(createWelcomeMessages());
 
 const presetTemplates = [
   {
+    label: "自由聊天",
+    description: "不上传资料，直接提学习问题",
+    prompt: "请先根据我的情况给我一些学习建议：",
+  },
+  {
     label: "总结 + 出题",
-    description: "适合历史、语文、政治类材料",
+    description: "适合上传资料后的复习场景",
     prompt: "请根据当前资料总结重点，并生成 5 个选择题帮助我复习。",
   },
   {
-    label: "提取知识点",
-    description: "把资料压缩成复习要点",
-    prompt: "请根据当前资料提取核心知识点，并按条目列出。",
-  },
-  {
     label: "资料追问",
-    description: "根据当前资料回答具体问题",
+    description: "围绕当前资料继续发问",
     prompt: "请根据当前资料回答：",
   },
 ];
@@ -286,23 +292,15 @@ const stageLabelMap: Record<TaskStatus, string> = {
 
 const orderedStages: TaskStatus[] = ["submitted", "analyzing", "executing", "completed"];
 const stageTitleMap: Record<TaskStatus, string> = {
-  submitted: "任务提交",
-  analyzing: "意图分析",
-  executing: "工具执行",
-  completed: "结果整理",
-  failed: "执行失败",
-};
-const defaultStageDetails: Record<TaskStatus, string> = {
-  submitted: "前端已接收并提交任务，准备交给后端处理。",
-  analyzing: "系统正在理解任务意图，并决定是否进入资料检索链路。",
-  executing: "系统正在执行混合检索、重排、摘要生成或出题流程。",
-  completed: "结果已经整理完成，可以在对话区查看输出内容。",
-  failed: "本次任务执行失败，请检查输入或重试。",
+  submitted: "提交",
+  analyzing: "分析",
+  executing: "执行",
+  completed: "完成",
+  failed: "失败",
 };
 
 const stageCards = computed(() => {
   const currentIndex = status.value === "idle" ? -1 : orderedStages.indexOf(status.value as TaskStatus);
-
   return orderedStages.map((stageStatus, index) => {
     let stateClass = "pending";
     let stateLabel = "待执行";
@@ -326,14 +324,13 @@ const stageCards = computed(() => {
     return {
       status: stageStatus,
       title: stageTitleMap[stageStatus],
-      detail: defaultStageDetails[stageStatus],
       stateClass,
       stateLabel,
     };
   });
 });
 
-const canRetryLastTask = computed(() => status.value === "failed" && Boolean(lastSubmittedMessage.value));
+const canRetryLastTask = computed(() => Boolean(lastSubmittedMessage.value) && !submitting.value);
 
 function createWelcomeMessages(): MessageItem[] {
   return [
@@ -341,7 +338,8 @@ function createWelcomeMessages(): MessageItem[] {
       id: "welcome",
       role: "assistant",
       kind: "text",
-      content: "### 欢迎\n\n你可以先上传学习资料，再让我围绕资料做追问、总结和出题。答错的题也会自动进入错题本。",
+      content:
+        "你好，我可以直接作为学习助手和你对话，也可以在上传资料后帮你总结、出题和进行资料追问。你可以直接开始提问。",
     },
   ];
 }
@@ -353,6 +351,19 @@ function clearProgressTimers() {
       window.clearTimeout(timer);
     }
   }
+}
+
+function resetFeedback() {
+  composerError.value = "";
+  composerNotice.value = "";
+}
+
+function toggleSidebar() {
+  isSidebarOpen.value = !isSidebarOpen.value;
+}
+
+function closeSidebar() {
+  isSidebarOpen.value = false;
 }
 
 function updateProgress(statusValue: TaskStatus, label: string) {
@@ -373,7 +384,7 @@ function resetDocumentFeedback() {
 }
 
 function startPendingProgress() {
-  composerError.value = "";
+  resetFeedback();
   planSteps.value = [];
   updateProgress("submitted", stageLabelMap.submitted);
 
@@ -382,7 +393,7 @@ function startPendingProgress() {
       if (submitting.value) {
         updateProgress("analyzing", stageLabelMap.analyzing);
       }
-    }, 250),
+    }, 200),
   );
 
   progressTimers.push(
@@ -390,7 +401,7 @@ function startPendingProgress() {
       if (submitting.value) {
         updateProgress("executing", stageLabelMap.executing);
       }
-    }, 900),
+    }, 800),
   );
 }
 
@@ -428,6 +439,7 @@ function hydrateMessagesFromTasks(tasks: TaskRecord[]) {
         id: `assistant-error-${task.id}`,
         role: "assistant",
         kind: "error",
+        prompt: task.message,
         errorMessage: task.errorMessage,
         errorHint: "这是历史执行记录中的失败结果。",
       });
@@ -438,6 +450,7 @@ function hydrateMessagesFromTasks(tasks: TaskRecord[]) {
         kind: "result",
         recordId: task.id,
         intent: task.intent,
+        prompt: task.message,
         result: task.result,
         sources: task.retrievedChunks,
       });
@@ -446,6 +459,7 @@ function hydrateMessagesFromTasks(tasks: TaskRecord[]) {
 
   messages.value = nextMessages;
   applyTaskRecordState(tasks[tasks.length - 1]);
+  void scrollToBottom();
 }
 
 function formatSessionTime(value: string) {
@@ -457,21 +471,41 @@ function formatSessionTime(value: string) {
   });
 }
 
+async function scrollToBottom() {
+  await nextTick();
+  if (messageListRef.value) {
+    messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
+  }
+}
+
 function startNewSession() {
   clearProgressTimers();
   activeSessionId.value = "";
-  activeSessionTitle.value = "新会话";
+  activeSessionTitle.value = "新对话";
   draft.value = defaultDraft;
   sessionError.value = "";
   documents.value = [];
   messages.value = createWelcomeMessages();
   resetInspectorState();
+  resetFeedback();
   resetDocumentFeedback();
+  closeSidebar();
+  void scrollToBottom();
 }
 
 function applyTemplate(prompt: string) {
   draft.value = prompt;
-  composerError.value = "";
+  resetFeedback();
+  closeSidebar();
+}
+
+function handleTemplateSelect() {
+  const matchedTemplate = presetTemplates.find((template) => template.label === selectedTemplate.value);
+  if (!matchedTemplate) {
+    return;
+  }
+  applyTemplate(matchedTemplate.prompt);
+  selectedTemplate.value = "";
 }
 
 function triggerDownload(fileName: string, content: string) {
@@ -551,6 +585,7 @@ async function openSession(sessionId: string) {
     activeSessionTitle.value = detail.title;
     documents.value = detail.documents;
     hydrateMessagesFromTasks(detail.tasks);
+    closeSidebar();
   } catch (error) {
     if (await handleAuthError(error)) {
       return;
@@ -589,9 +624,64 @@ function retryLastTask() {
   if (!lastSubmittedMessage.value || submitting.value) {
     return;
   }
-
   draft.value = lastSubmittedMessage.value;
   void handleSubmit();
+}
+
+function retryMessage(message: MessageItem) {
+  if (!message.prompt || submitting.value) {
+    return;
+  }
+  draft.value = message.prompt;
+  void handleSubmit();
+}
+
+function buildCopyText(message: MessageItem) {
+  if (message.kind !== "result" || !message.result) {
+    return "";
+  }
+
+  const parts: string[] = [];
+  if (message.result.answer) {
+    parts.push(`回答内容\n${message.result.answer}`);
+  }
+  if (message.result.summary) {
+    parts.push(`摘要结果\n${message.result.summary}`);
+  }
+  if (message.result.quiz?.length) {
+    parts.push(
+      [
+        "练习题",
+        ...message.result.quiz.map((item, index) => {
+          const options = item.options.map((option, optionIndex) => `${String.fromCharCode(65 + optionIndex)}. ${option}`);
+          return `${index + 1}. ${item.question}\n${options.join("\n")}\n答案：${item.answer}`;
+        }),
+      ].join("\n\n"),
+    );
+  }
+  if (message.sources?.length) {
+    parts.push(["资料来源", ...message.sources.map((item) => `${item.fileName}\n${item.content}`)].join("\n\n"));
+  }
+
+  return parts.join("\n\n");
+}
+
+async function handleCopy(message: MessageItem) {
+  const text = buildCopyText(message);
+  if (!text) {
+    composerError.value = "当前结果没有可复制的内容";
+    composerNotice.value = "";
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    composerNotice.value = "回答内容已复制到剪贴板";
+    composerError.value = "";
+  } catch {
+    composerError.value = "复制失败，请检查浏览器剪贴板权限";
+    composerNotice.value = "";
+  }
 }
 
 async function handleFileChange(event: Event) {
@@ -605,21 +695,28 @@ async function handleFileChange(event: Event) {
 
   uploadingDocument.value = true;
   resetDocumentFeedback();
+  documentFeedback.value = `正在上传：${file.name}`;
+  documentFeedbackType.value = "success";
+  composerNotice.value = documentFeedback.value;
 
   try {
     const uploaded = await uploadDocument(file, authStore.token, activeSessionId.value || undefined);
     activeSessionId.value = uploaded.sessionId;
-    documents.value = [...documents.value, uploaded];
+    documents.value = [...documents.value.filter((item) => item.documentId !== uploaded.documentId), uploaded];
     documentFeedback.value = `资料已上传：${uploaded.fileName}`;
     documentFeedbackType.value = "success";
+    composerNotice.value = documentFeedback.value;
     await loadSessionList();
-    await openSession(uploaded.sessionId);
+    const currentSession = sessions.value.find((item) => item.sessionId === uploaded.sessionId);
+    activeSessionTitle.value = currentSession?.title ?? activeSessionTitle.value;
   } catch (error) {
     if (await handleAuthError(error)) {
       return;
     }
     documentFeedback.value = error instanceof Error ? error.message : "资料上传失败";
     documentFeedbackType.value = "error";
+    composerError.value = documentFeedback.value;
+    composerNotice.value = "";
   } finally {
     uploadingDocument.value = false;
   }
@@ -633,8 +730,11 @@ async function handleExport(recordId?: number) {
   try {
     const exported = await exportTaskResult(recordId, authStore.token);
     triggerDownload(exported.fileName, exported.content);
+    composerNotice.value = "结果已导出";
+    composerError.value = "";
   } catch (error) {
     composerError.value = error instanceof Error ? error.message : "导出失败";
+    composerNotice.value = "";
   }
 }
 
@@ -658,22 +758,7 @@ async function handleQuizSubmit(recordId: number | undefined, answers: Array<{ q
   }
 }
 
-async function handleSubmit() {
-  const message = draft.value.trim();
-  if (submitting.value || checkingSession.value || loadingHistory.value) {
-    return;
-  }
-
-  if (!message) {
-    composerError.value = "请输入至少 2 个字符的教育任务描述。";
-    return;
-  }
-
-  if (message.length < 2) {
-    composerError.value = "任务内容过短，请补充更完整的描述。";
-    return;
-  }
-
+async function sendMessage(message: string) {
   messages.value.push({
     id: crypto.randomUUID(),
     role: "user",
@@ -681,11 +766,14 @@ async function handleSubmit() {
     content: message,
   });
 
+  draft.value = "";
   submitting.value = true;
-  composerError.value = "";
+  resetFeedback();
   intent.value = "";
   lastSubmittedMessage.value = message;
   startPendingProgress();
+  closeSidebar();
+  await scrollToBottom();
 
   try {
     const response = await executeTask(message, authStore.token, activeSessionId.value || undefined);
@@ -702,13 +790,14 @@ async function handleSubmit() {
       kind: "result",
       recordId: response.recordId,
       intent: response.intent,
+      prompt: message,
       result: response.result,
       sources: response.retrievedChunks,
     });
-    draft.value = "";
     await loadSessionList();
     const currentSession = sessions.value.find((item) => item.sessionId === response.sessionId);
     activeSessionTitle.value = currentSession?.title ?? activeSessionTitle.value;
+    await scrollToBottom();
   } catch (error) {
     clearProgressTimers();
     if (await handleAuthError(error)) {
@@ -717,29 +806,51 @@ async function handleSubmit() {
     const messageText = error instanceof Error ? error.message : "请求失败";
     status.value = "failed";
     currentStatusLabel.value = stageLabelMap.failed;
-    planSteps.value = [
-      stageLabelMap.submitted,
-      stageLabelMap.analyzing,
-      "任务执行中断，请检查输入或稍后重试",
-    ];
-    composerError.value = "任务执行失败，可直接重试上一次任务。";
+    planSteps.value = [stageLabelMap.submitted, stageLabelMap.analyzing, "任务执行中断，请检查输入后重试"];
+    composerError.value = "任务执行失败，可以直接重新回答上一条消息。";
+    composerNotice.value = "";
     messages.value.push({
       id: crypto.randomUUID(),
       role: "assistant",
       kind: "error",
+      prompt: message,
       errorMessage: messageText,
-      errorHint: "可以点击“重试上次任务”，或修改描述后重新发送。",
+      errorHint: "可以点击“重新回答”，或者修改描述后重新发送。",
     });
+    await scrollToBottom();
   } finally {
     submitting.value = false;
   }
 }
 
+async function handleSubmit() {
+  if (submitting.value || checkingSession.value || loadingHistory.value) {
+    return;
+  }
+
+  const message = draft.value.trim();
+  if (!message || message.length < 2) {
+    composerError.value = "请输入至少 2 个字符的学习问题或任务描述。";
+    composerNotice.value = "";
+    return;
+  }
+
+  await sendMessage(message);
+}
+
+function handleResize() {
+  if (window.innerWidth > 1080) {
+    isSidebarOpen.value = true;
+  }
+}
+
 onMounted(() => {
+  window.addEventListener("resize", handleResize);
   void validateSession();
 });
 
 onBeforeUnmount(() => {
   clearProgressTimers();
+  window.removeEventListener("resize", handleResize);
 });
 </script>

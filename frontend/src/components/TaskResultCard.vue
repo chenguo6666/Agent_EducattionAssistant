@@ -1,35 +1,23 @@
 <template>
   <article class="result-card">
-    <header class="result-card-header">
-      <div>
-        <p class="result-card-eyebrow">Agent 输出</p>
-        <h3 class="result-card-title">任务结果</h3>
-      </div>
-      <div class="result-actions">
-        <span class="result-card-intent">{{ intentLabel }}</span>
-        <button class="secondary-button compact-button" type="button" @click="$emit('export')">
-          导出结果
-        </button>
-      </div>
-    </header>
+    <div class="result-actions result-actions-top">
+      <span class="result-card-intent">{{ intentLabel }}</span>
+      <button class="icon-action-button" type="button" @click="$emit('copy')">复制</button>
+      <button class="icon-action-button" type="button" @click="$emit('retry')">重新回答</button>
+      <button class="icon-action-button" type="button" @click="$emit('export')">导出</button>
+    </div>
 
-    <section v-if="result.answer" class="result-section">
-      <div class="result-section-header">
-        <h4>资料追问回答</h4>
-      </div>
+    <section v-if="result.answer" class="result-section result-section-plain">
       <p class="result-summary">{{ result.answer }}</p>
     </section>
 
-    <section v-if="result.summary" class="result-section">
-      <div class="result-section-header">
-        <h4>摘要结果</h4>
-      </div>
+    <section v-if="result.summary" class="result-section result-section-plain">
       <p class="result-summary">{{ result.summary }}</p>
     </section>
 
     <section v-if="result.quiz?.length" class="result-section">
       <div class="result-section-header">
-        <h4>题目结果</h4>
+        <h4>练习题</h4>
         <span class="result-section-meta">{{ result.quiz.length }} 题</span>
       </div>
 
@@ -99,7 +87,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  copy: [];
   export: [];
+  retry: [];
   submitQuiz: [answers: Array<{ questionIndex: number; userAnswer: string }>];
 }>();
 
@@ -108,6 +98,7 @@ const intentMap: Record<string, string> = {
   quiz: "仅出题",
   summary_and_quiz: "摘要 + 出题",
   rag_answer: "资料追问",
+  assistant_chat: "自由对话",
   unknown: "兜底处理",
 };
 

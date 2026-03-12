@@ -142,6 +142,11 @@ textarea {
   transition: 0.2s ease;
 }
 
+.compact-button {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 .primary-button {
   background: var(--primary);
   color: #fff;
@@ -180,6 +185,130 @@ textarea {
 .stage-list {
   display: grid;
   gap: 12px;
+}
+
+.session-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.document-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.mistake-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.session-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-list {
+  display: grid;
+  gap: 10px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.session-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: left;
+  color: #223243;
+}
+
+.session-item.active {
+  border-color: rgba(31, 111, 235, 0.28);
+  background: rgba(31, 111, 235, 0.08);
+}
+
+.session-item span,
+.session-item small,
+.session-empty {
+  color: var(--muted);
+}
+
+.session-item span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 13px;
+}
+
+.session-empty {
+  padding: 14px 16px;
+  border: 1px dashed rgba(21, 32, 43, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.document-list {
+  display: grid;
+  gap: 10px;
+}
+
+.document-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.document-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.document-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.mistake-list {
+  display: grid;
+  gap: 10px;
+}
+
+.mistake-item {
+  padding: 12px 14px;
+  border: 1px solid rgba(180, 35, 24, 0.12);
+  border-radius: 16px;
+  background: rgba(180, 35, 24, 0.04);
+}
+
+.mistake-item p,
+.mistake-item small {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.upload-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .stage-card {
@@ -314,6 +443,12 @@ textarea {
   font-weight: 700;
 }
 
+.result-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .result-section {
   margin-top: 18px;
   padding-top: 18px;
@@ -356,10 +491,6 @@ textarea {
 }
 
 .quiz-options li {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 10px;
-  padding: 10px 12px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.78);
   color: #324254;
@@ -370,10 +501,61 @@ textarea {
   background: rgba(15, 123, 69, 0.08);
 }
 
+.quiz-options li.selected {
+  border: 1px solid rgba(31, 111, 235, 0.18);
+  background: rgba(31, 111, 235, 0.08);
+}
+
+.quiz-option-button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+}
+
 .quiz-answer,
 .error-card-message,
 .error-card-hint {
   margin: 12px 0 0;
+}
+
+.quiz-submit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.source-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.source-card {
+  padding: 14px;
+  border: 1px solid rgba(31, 111, 235, 0.12);
+  border-radius: 16px;
+  background: rgba(31, 111, 235, 0.04);
+}
+
+.source-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.source-card p {
+  margin: 10px 0 0;
+  color: #324254;
 }
 
 .error-card {
@@ -453,6 +635,19 @@ textarea {
   color: #b42318;
 }
 
+.inline-feedback.success {
+  background: rgba(15, 123, 69, 0.08);
+  color: #0f7b45;
+}
+
+.context-banner {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(31, 111, 235, 0.08);
+  color: var(--primary-dark);
+  font-weight: 600;
+}
+
 .chat-actions {
   display: flex;
   justify-content: space-between;
@@ -488,7 +683,9 @@ textarea {
   }
 
   .chat-action-buttons,
-  .stage-card-header {
+  .stage-card-header,
+  .result-actions,
+  .quiz-submit-row {
     flex-direction: column;
     align-items: stretch;
   }

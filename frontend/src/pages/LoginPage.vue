@@ -2,9 +2,9 @@
   <main class="auth-layout">
     <section class="auth-card">
       <div>
-        <p class="eyebrow">Sprint 1 / MVP</p>
+        <p class="eyebrow">Education Agent</p>
         <h1>教育助手 AI Agent</h1>
-        <p class="muted">先完成登录与基础对话链路，后续再接入完整 Agent 能力。</p>
+        <p class="muted">上传学习资料后即可进行总结、出题、资料追问与错题整理。</p>
       </div>
 
       <form class="auth-form" @submit.prevent="handleSubmit">

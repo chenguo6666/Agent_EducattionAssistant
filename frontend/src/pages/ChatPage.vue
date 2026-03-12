@@ -1,9 +1,11 @@
-﻿<template>
+<template>
   <main class="chat-layout">
     <aside class="sidebar-card">
-      <p class="eyebrow">教育场景 Agent</p>
-      <h1>对话工作台</h1>
-      <p class="muted">当前阶段先验证 Sprint 1 主链路：输入任务、识别意图、调用 Mock Tool、返回结果。</p>
+      <div>
+        <p class="eyebrow">教育场景 Agent</p>
+        <h1>对话工作台</h1>
+        <p class="muted">当前阶段已支持资料上传、轻量 RAG、结果导出和错题整理。</p>
+      </div>
 
       <div class="status-panel hero-status-panel">
         <div>
@@ -15,8 +17,81 @@
           <strong>{{ currentStatusLabel }}</strong>
         </div>
         <div>
+          <span class="status-label">当前会话</span>
+          <strong>{{ activeSessionTitle }}</strong>
+        </div>
+        <div>
           <span class="status-label">识别意图</span>
           <strong>{{ intent || "等待提交" }}</strong>
+        </div>
+      </div>
+
+      <div class="session-panel">
+        <div class="session-panel-header">
+          <p class="status-label">历史会话</p>
+          <button class="secondary-button compact-button" type="button" @click="startNewSession">新建会话</button>
+        </div>
+        <p v-if="sessionError" class="inline-feedback">{{ sessionError }}</p>
+        <div v-if="loadingSessions" class="session-empty">会话加载中...</div>
+        <div v-else-if="sessions.length === 0" class="session-empty">还没有历史会话，先发送一条任务或上传资料即可创建。</div>
+        <div v-else class="session-list">
+          <button
+            v-for="session in sessions"
+            :key="session.sessionId"
+            class="session-item"
+            :class="{ active: session.sessionId === activeSessionId }"
+            type="button"
+            @click="openSession(session.sessionId)"
+          >
+            <strong>{{ session.title }}</strong>
+            <span>{{ session.lastMessage || "暂无消息" }}</span>
+            <small>{{ formatSessionTime(session.updatedAt) }}</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="document-panel">
+        <div class="session-panel-header">
+          <p class="status-label">会话资料</p>
+          <label class="secondary-button compact-button upload-button">
+            上传资料
+            <input
+              class="file-input"
+              type="file"
+              accept=".txt,.md,.pdf,.docx"
+              :disabled="uploadingDocument"
+              @change="handleFileChange"
+            />
+          </label>
+        </div>
+        <p class="muted">支持 txt、md、pdf、docx。上传后会自动分块、检索并作为当前会话上下文。</p>
+        <p v-if="documentFeedback" class="inline-feedback" :class="{ success: documentFeedbackType === 'success' }">
+          {{ documentFeedback }}
+        </p>
+        <div v-if="documents.length === 0" class="session-empty">当前会话还没有上传资料。</div>
+        <div v-else class="document-list">
+          <article v-for="document in documents" :key="document.documentId" class="document-item">
+            <div class="document-item-header">
+              <strong>{{ document.fileName }}</strong>
+              <span class="stage-pill">{{ document.fileType.toUpperCase() }}</span>
+            </div>
+            <p>{{ document.snippet || "资料已上传，等待解析内容展示。" }}</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="mistake-panel">
+        <div class="session-panel-header">
+          <p class="status-label">错题本</p>
+          <span class="muted">最近 {{ mistakes.length }} 条</span>
+        </div>
+        <div v-if="mistakes.length === 0" class="session-empty">提交题目作答后，答错的题会自动记录在这里。</div>
+        <div v-else class="mistake-list">
+          <article v-for="mistake in mistakes" :key="mistake.id" class="mistake-item">
+            <strong>{{ mistake.question }}</strong>
+            <p>你的答案：{{ mistake.userAnswer }}，正确答案：{{ mistake.correctAnswer }}</p>
+            <small v-if="mistake.sourceExcerpt">{{ mistake.sourceExcerpt }}</small>
+          </article>
         </div>
       </div>
 
@@ -51,16 +126,17 @@
 
     <section class="chat-card">
       <div class="message-list">
-        <template v-for="message in messages" :key="message.id">
-          <MessageBubble
-            v-if="message.kind === 'text'"
-            :role="message.role"
-            :content="message.content ?? ''"
-          />
+        <div v-if="loadingHistory" class="session-empty">会话内容加载中...</div>
+        <template v-else v-for="message in messages" :key="message.id">
+          <MessageBubble v-if="message.kind === 'text'" :role="message.role" :content="message.content ?? ''" />
           <TaskResultCard
             v-else-if="message.kind === 'result'"
             :intent="message.intent ?? 'unknown'"
             :result="message.result!"
+            :sources="message.sources ?? []"
+            :quiz-feedback="message.quizFeedback"
+            @export="handleExport(message.recordId)"
+            @submit-quiz="handleQuizSubmit(message.recordId, $event)"
           />
           <TaskErrorCard
             v-else
@@ -90,24 +166,23 @@
           </div>
         </div>
 
+        <div v-if="documents.length > 0" class="context-banner">
+          当前会话已挂载 {{ documents.length }} 份资料，本次任务会自动进行检索并基于相关片段执行。
+        </div>
+
         <p v-if="composerError" class="inline-feedback">{{ composerError }}</p>
         <textarea
           v-model="draft"
           rows="5"
-          placeholder="例如：总结这篇历史课文并生成 5 个选择题"
+          placeholder="例如：工业革命带来了哪些社会问题？请根据当前资料回答。"
         />
         <div class="chat-actions">
-          <span class="muted">支持中文自然语言任务输入</span>
+          <span class="muted">支持资料追问、摘要生成、出题和复习提纲。</span>
           <div class="chat-action-buttons">
-            <button
-              v-if="canRetryLastTask"
-              class="secondary-button"
-              type="button"
-              @click="retryLastTask"
-            >
+            <button v-if="canRetryLastTask" class="secondary-button" type="button" @click="retryLastTask">
               重试上次任务
             </button>
-            <button class="primary-button" type="submit" :disabled="submitting || checkingSession">
+            <button class="primary-button" type="submit" :disabled="submitting || checkingSession || loadingHistory">
               {{ checkingSession ? "校验登录中..." : submitting ? "处理中..." : "发送任务" }}
             </button>
           </div>
@@ -121,20 +196,35 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { fetchMe } from "@/api/auth";
-import { executeTask } from "@/api/chat";
+import { executeTask, exportTaskResult, fetchMistakes, fetchSessionDetail, fetchSessions, submitQuizAttempt } from "@/api/chat";
+import { uploadDocument } from "@/api/documents";
 import MessageBubble from "@/components/MessageBubble.vue";
 import TaskErrorCard from "@/components/TaskErrorCard.vue";
 import TaskResultCard from "@/components/TaskResultCard.vue";
 import { useAuthStore } from "@/stores/auth";
-import type { ChatResponse, ChatResult, TaskStage, TaskStatus } from "@/types/chat";
+import type {
+  ChatResponse,
+  ChatResult,
+  ChatSessionSummary,
+  DocumentSummary,
+  MistakeItem,
+  RetrievedChunk,
+  TaskRecord,
+  TaskStage,
+  TaskStatus,
+} from "@/types/chat";
 
 type MessageKind = "text" | "result" | "error";
+
 interface MessageItem {
   id: string;
   role: "user" | "assistant";
   kind: MessageKind;
+  recordId?: number;
   content?: string;
   result?: ChatResult;
+  sources?: RetrievedChunk[];
+  quizFeedback?: string;
   intent?: string;
   errorMessage?: string;
   errorHint?: string;
@@ -143,9 +233,14 @@ interface MessageItem {
 const router = useRouter();
 const authStore = useAuthStore();
 
-const draft = ref("总结这篇历史课文并生成 5 个选择题：工业革命促进了生产力发展，也带来了社会结构的变化。");
+const defaultDraft = "请根据当前资料总结重点，并生成 5 个选择题帮助我复习。";
+
+const draft = ref(defaultDraft);
 const submitting = ref(false);
+const uploadingDocument = ref(false);
 const checkingSession = ref(true);
+const loadingSessions = ref(false);
+const loadingHistory = ref(false);
 const status = ref<TaskStatus | "idle">("idle");
 const intent = ref("");
 const planSteps = ref<string[]>([]);
@@ -153,30 +248,31 @@ const currentStatusLabel = ref("等待提交");
 const progressTimers: number[] = [];
 const composerError = ref("");
 const lastSubmittedMessage = ref("");
-const messages = ref<MessageItem[]>([
-  {
-    id: "welcome",
-    role: "assistant",
-    kind: "text",
-    content: "### 欢迎\n\n你可以直接输入学习任务，我会先按 Sprint 1 的能力返回摘要、题目或综合结果。",
-  },
-]);
+const sessionError = ref("");
+const documentFeedback = ref("");
+const documentFeedbackType = ref<"error" | "success">("success");
+const sessions = ref<ChatSessionSummary[]>([]);
+const documents = ref<DocumentSummary[]>([]);
+const mistakes = ref<MistakeItem[]>([]);
+const activeSessionId = ref("");
+const activeSessionTitle = ref("新会话");
+const messages = ref<MessageItem[]>(createWelcomeMessages());
 
 const presetTemplates = [
   {
     label: "总结 + 出题",
     description: "适合历史、语文、政治类材料",
-    prompt: "请总结这段学习材料，并生成 5 个选择题帮助我复习：",
+    prompt: "请根据当前资料总结重点，并生成 5 个选择题帮助我复习。",
   },
   {
     label: "提取知识点",
-    description: "把长文本压缩成复习要点",
-    prompt: "请提取这段内容的核心知识点，并按条目列出：",
+    description: "把资料压缩成复习要点",
+    prompt: "请根据当前资料提取核心知识点，并按条目列出。",
   },
   {
-    label: "生成复习提纲",
-    description: "适合课前预习和考前梳理",
-    prompt: "请根据这段内容生成一份结构化复习提纲：",
+    label: "资料追问",
+    description: "根据当前资料回答具体问题",
+    prompt: "请根据当前资料回答：",
   },
 ];
 
@@ -198,8 +294,8 @@ const stageTitleMap: Record<TaskStatus, string> = {
 };
 const defaultStageDetails: Record<TaskStatus, string> = {
   submitted: "前端已接收并提交任务，准备交给后端处理。",
-  analyzing: "系统正在理解你的任务意图，并决定是否需要多个工具协作。",
-  executing: "系统正在调用摘要工具、出题工具或组合流程。",
+  analyzing: "系统正在理解任务意图，并决定是否进入资料检索链路。",
+  executing: "系统正在执行混合检索、重排、摘要生成或出题流程。",
   completed: "结果已经整理完成，可以在对话区查看输出内容。",
   failed: "本次任务执行失败，请检查输入或重试。",
 };
@@ -239,6 +335,17 @@ const stageCards = computed(() => {
 
 const canRetryLastTask = computed(() => status.value === "failed" && Boolean(lastSubmittedMessage.value));
 
+function createWelcomeMessages(): MessageItem[] {
+  return [
+    {
+      id: "welcome",
+      role: "assistant",
+      kind: "text",
+      content: "### 欢迎\n\n你可以先上传学习资料，再让我围绕资料做追问、总结和出题。答错的题也会自动进入错题本。",
+    },
+  ];
+}
+
 function clearProgressTimers() {
   while (progressTimers.length > 0) {
     const timer = progressTimers.pop();
@@ -251,6 +358,18 @@ function clearProgressTimers() {
 function updateProgress(statusValue: TaskStatus, label: string) {
   status.value = statusValue;
   currentStatusLabel.value = label;
+}
+
+function resetInspectorState() {
+  status.value = "idle";
+  currentStatusLabel.value = "等待提交";
+  intent.value = "";
+  planSteps.value = [];
+}
+
+function resetDocumentFeedback() {
+  documentFeedback.value = "";
+  documentFeedbackType.value = "success";
 }
 
 function startPendingProgress() {
@@ -281,10 +400,165 @@ function applyCompletedTimeline(response: ChatResponse) {
   planSteps.value = Array.from(new Set([...response.timeline.map((item: TaskStage) => item.label), ...response.steps]));
 }
 
+function applyTaskRecordState(record: TaskRecord) {
+  status.value = record.status;
+  currentStatusLabel.value = stageLabelMap[record.status];
+  intent.value = record.intent;
+  planSteps.value = Array.from(new Set([...record.timeline.map((item: TaskStage) => item.label), ...record.steps]));
+}
+
+function hydrateMessagesFromTasks(tasks: TaskRecord[]) {
+  if (tasks.length === 0) {
+    messages.value = createWelcomeMessages();
+    resetInspectorState();
+    return;
+  }
+
+  const nextMessages: MessageItem[] = [];
+  for (const task of tasks) {
+    nextMessages.push({
+      id: `user-${task.id}`,
+      role: "user",
+      kind: "text",
+      content: task.message,
+    });
+
+    if (task.errorMessage) {
+      nextMessages.push({
+        id: `assistant-error-${task.id}`,
+        role: "assistant",
+        kind: "error",
+        errorMessage: task.errorMessage,
+        errorHint: "这是历史执行记录中的失败结果。",
+      });
+    } else {
+      nextMessages.push({
+        id: `assistant-result-${task.id}`,
+        role: "assistant",
+        kind: "result",
+        recordId: task.id,
+        intent: task.intent,
+        result: task.result,
+        sources: task.retrievedChunks,
+      });
+    }
+  }
+
+  messages.value = nextMessages;
+  applyTaskRecordState(tasks[tasks.length - 1]);
+}
+
+function formatSessionTime(value: string) {
+  return new Date(value).toLocaleString("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function startNewSession() {
+  clearProgressTimers();
+  activeSessionId.value = "";
+  activeSessionTitle.value = "新会话";
+  draft.value = defaultDraft;
+  sessionError.value = "";
+  documents.value = [];
+  messages.value = createWelcomeMessages();
+  resetInspectorState();
+  resetDocumentFeedback();
+}
+
+function applyTemplate(prompt: string) {
+  draft.value = prompt;
+  composerError.value = "";
+}
+
+function triggerDownload(fileName: string, content: string) {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function logout() {
   clearProgressTimers();
   authStore.clearSession();
   router.push("/login");
+}
+
+async function handleAuthError(error: unknown) {
+  const messageText = error instanceof Error ? error.message : "请求失败";
+  if (["Missing token", "Invalid token", "User not found"].includes(messageText)) {
+    authStore.clearSession();
+    await router.replace("/login");
+    return true;
+  }
+  return false;
+}
+
+async function loadSessionList() {
+  if (!authStore.token) {
+    return;
+  }
+
+  loadingSessions.value = true;
+  sessionError.value = "";
+
+  try {
+    const response = await fetchSessions(authStore.token);
+    sessions.value = response.sessions;
+  } catch (error) {
+    if (await handleAuthError(error)) {
+      return;
+    }
+    sessionError.value = error instanceof Error ? error.message : "会话列表加载失败";
+  } finally {
+    loadingSessions.value = false;
+  }
+}
+
+async function loadMistakes() {
+  if (!authStore.token) {
+    return;
+  }
+
+  try {
+    const response = await fetchMistakes(authStore.token);
+    mistakes.value = response.items;
+  } catch {
+    mistakes.value = [];
+  }
+}
+
+async function openSession(sessionId: string) {
+  if (!authStore.token || !sessionId) {
+    return;
+  }
+
+  loadingHistory.value = true;
+  sessionError.value = "";
+  resetDocumentFeedback();
+
+  try {
+    const detail = await fetchSessionDetail(sessionId, authStore.token);
+    activeSessionId.value = detail.sessionId;
+    activeSessionTitle.value = detail.title;
+    documents.value = detail.documents;
+    hydrateMessagesFromTasks(detail.tasks);
+  } catch (error) {
+    if (await handleAuthError(error)) {
+      return;
+    }
+    sessionError.value = error instanceof Error ? error.message : "会话内容加载失败";
+  } finally {
+    loadingHistory.value = false;
+  }
 }
 
 async function validateSession() {
@@ -297,6 +571,12 @@ async function validateSession() {
   try {
     const user = await fetchMe(authStore.token);
     authStore.setUser(user);
+    await Promise.all([loadSessionList(), loadMistakes()]);
+    if (sessions.value.length > 0) {
+      await openSession(sessions.value[0].sessionId);
+    } else {
+      startNewSession();
+    }
   } catch {
     authStore.clearSession();
     router.replace("/login");
@@ -305,23 +585,82 @@ async function validateSession() {
   }
 }
 
-function applyTemplate(prompt: string) {
-  draft.value = prompt;
-  composerError.value = "";
-}
-
 function retryLastTask() {
   if (!lastSubmittedMessage.value || submitting.value) {
     return;
   }
 
   draft.value = lastSubmittedMessage.value;
-  handleSubmit();
+  void handleSubmit();
+}
+
+async function handleFileChange(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  target.value = "";
+
+  if (!file || !authStore.token) {
+    return;
+  }
+
+  uploadingDocument.value = true;
+  resetDocumentFeedback();
+
+  try {
+    const uploaded = await uploadDocument(file, authStore.token, activeSessionId.value || undefined);
+    activeSessionId.value = uploaded.sessionId;
+    documents.value = [...documents.value, uploaded];
+    documentFeedback.value = `资料已上传：${uploaded.fileName}`;
+    documentFeedbackType.value = "success";
+    await loadSessionList();
+    await openSession(uploaded.sessionId);
+  } catch (error) {
+    if (await handleAuthError(error)) {
+      return;
+    }
+    documentFeedback.value = error instanceof Error ? error.message : "资料上传失败";
+    documentFeedbackType.value = "error";
+  } finally {
+    uploadingDocument.value = false;
+  }
+}
+
+async function handleExport(recordId?: number) {
+  if (!recordId || !authStore.token) {
+    return;
+  }
+
+  try {
+    const exported = await exportTaskResult(recordId, authStore.token);
+    triggerDownload(exported.fileName, exported.content);
+  } catch (error) {
+    composerError.value = error instanceof Error ? error.message : "导出失败";
+  }
+}
+
+async function handleQuizSubmit(recordId: number | undefined, answers: Array<{ questionIndex: number; userAnswer: string }>) {
+  if (!recordId || !authStore.token) {
+    return;
+  }
+
+  try {
+    const response = await submitQuizAttempt(recordId, answers, authStore.token);
+    const target = messages.value.find((item) => item.recordId === recordId);
+    if (target) {
+      target.quizFeedback = response.message;
+    }
+    await loadMistakes();
+  } catch (error) {
+    const target = messages.value.find((item) => item.recordId === recordId);
+    if (target) {
+      target.quizFeedback = error instanceof Error ? error.message : "提交作答失败";
+    }
+  }
 }
 
 async function handleSubmit() {
   const message = draft.value.trim();
-  if (submitting.value || checkingSession.value) {
+  if (submitting.value || checkingSession.value || loadingHistory.value) {
     return;
   }
 
@@ -349,50 +688,55 @@ async function handleSubmit() {
   startPendingProgress();
 
   try {
-    const response = await executeTask(message, authStore.token);
+    const response = await executeTask(message, authStore.token, activeSessionId.value || undefined);
     clearProgressTimers();
-    intent.value = response.intent;
+    activeSessionId.value = response.sessionId;
     applyCompletedTimeline(response);
+    intent.value = response.intent;
+    if (response.usedDocuments.length > 0) {
+      documents.value = response.usedDocuments;
+    }
     messages.value.push({
       id: response.taskId,
       role: "assistant",
       kind: "result",
+      recordId: response.recordId,
       intent: response.intent,
       result: response.result,
+      sources: response.retrievedChunks,
     });
     draft.value = "";
+    await loadSessionList();
+    const currentSession = sessions.value.find((item) => item.sessionId === response.sessionId);
+    activeSessionTitle.value = currentSession?.title ?? activeSessionTitle.value;
   } catch (error) {
     clearProgressTimers();
+    if (await handleAuthError(error)) {
+      return;
+    }
     const messageText = error instanceof Error ? error.message : "请求失败";
-    const sessionExpired = ["Missing token", "Invalid token", "User not found"].includes(messageText);
     status.value = "failed";
     currentStatusLabel.value = stageLabelMap.failed;
     planSteps.value = [
       stageLabelMap.submitted,
       stageLabelMap.analyzing,
-      sessionExpired ? "登录状态失效，需要重新认证" : "任务执行中断，请检查输入或稍后重试",
+      "任务执行中断，请检查输入或稍后重试",
     ];
-    composerError.value = sessionExpired ? "登录已失效，请重新登录后再发送任务。" : "任务执行失败，可直接重试上一次任务。";
+    composerError.value = "任务执行失败，可直接重试上一次任务。";
     messages.value.push({
       id: crypto.randomUUID(),
       role: "assistant",
       kind: "error",
       errorMessage: messageText,
-      errorHint: sessionExpired ? "请重新登录后再次提交任务。" : "可以点击“重试上次任务”，或修改描述后重新发送。",
+      errorHint: "可以点击“重试上次任务”，或修改描述后重新发送。",
     });
-    if (sessionExpired) {
-      authStore.clearSession();
-      window.setTimeout(() => {
-        router.replace("/login");
-      }, 600);
-    }
   } finally {
     submitting.value = false;
   }
 }
 
 onMounted(() => {
-  validateSession();
+  void validateSession();
 });
 
 onBeforeUnmount(() => {

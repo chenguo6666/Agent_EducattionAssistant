@@ -95,15 +95,9 @@ async function loginAndRedirect(account: string, password: string) {
     password,
   });
   authStore.setSession(response);
-  
-  // Show success toast before redirecting
-  showToast("登录成功！正在进入工作台...", "success");
-  
-  // Delay redirect to show toast
-  setTimeout(async () => {
-    hideToast();
-    await router.push("/chat");
-  }, 1500);
+  // Store login success flag for ChatPage to show toast
+  sessionStorage.setItem('loginSuccess', 'true');
+  await router.push("/chat");
 }
 
 async function handleSubmit() {
@@ -112,22 +106,16 @@ async function handleSubmit() {
 
   try {
     if (isRegister.value) {
-      // Registration
+      // Registration - set flag before redirecting
       await register({
         username: form.username,
         phone: form.phone,
         password: form.password,
       });
-      
-      // Show success toast, then redirect to login
-      showToast("注册成功！正在跳转到登录页面...", "success");
-      
-      // Delay redirect to show toast
-      setTimeout(() => {
-        isRegister.value = false;
-        form.account = form.username;
-        hideToast();
-      }, 2000);
+      sessionStorage.setItem('registerSuccess', 'true');
+      isRegister.value = false;
+      form.account = form.username;
+      showToast("注册成功！请登录", "success");
       
     } else {
       // Login
@@ -142,6 +130,18 @@ async function handleSubmit() {
 }
 
 onMounted(() => {
+  // Check if user just logged in
+  if (sessionStorage.getItem('loginSuccess') === 'true') {
+    sessionStorage.removeItem('loginSuccess');
+    showToast("登录成功！", "success");
+  }
+  
+  // Check if user just registered
+  if (sessionStorage.getItem('registerSuccess') === 'true') {
+    sessionStorage.removeItem('registerSuccess');
+    showToast("注册成功！请登录", "success");
+  }
+  
   if (authStore.isAuthenticated) {
     router.replace("/chat");
   }

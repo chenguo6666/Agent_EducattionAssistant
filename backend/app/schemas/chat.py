@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas.document import DocumentSummaryResponse, RetrievedChunkResponse
 
 TaskStatus = Literal["submitted", "analyzing", "executing", "completed", "failed"]
+TraceStatus = Literal["pending", "running", "completed", "failed"]
 
 
 class ChatRequest(BaseModel):
@@ -37,6 +38,21 @@ class TaskStage(BaseModel):
     label: str
 
 
+class AgentTraceItem(BaseModel):
+    type: Literal["analysis", "tool", "final"]
+    label: str
+    status: TraceStatus
+    summary: str | None = None
+
+
+class ToolCallItem(BaseModel):
+    toolName: str
+    displayName: str
+    status: TraceStatus
+    inputSummary: str | None = None
+    outputSummary: str | None = None
+
+
 class ChatResult(BaseModel):
     summary: str | None = None
     quiz: list[QuizItem] | None = None
@@ -52,8 +68,10 @@ class ChatResponse(BaseModel):
     steps: list[str]
     timeline: list[TaskStage]
     result: ChatResult
-    usedDocuments: list[DocumentSummaryResponse] = []
-    retrievedChunks: list[RetrievedChunkResponse] = []
+    agentTrace: list[AgentTraceItem] = Field(default_factory=list)
+    toolCalls: list[ToolCallItem] = Field(default_factory=list)
+    usedDocuments: list[DocumentSummaryResponse] = Field(default_factory=list)
+    retrievedChunks: list[RetrievedChunkResponse] = Field(default_factory=list)
 
 
 class TaskRecordResponse(BaseModel):
@@ -64,7 +82,9 @@ class TaskRecordResponse(BaseModel):
     steps: list[str]
     timeline: list[TaskStage]
     result: ChatResult
-    retrievedChunks: list[RetrievedChunkResponse] = []
+    agentTrace: list[AgentTraceItem] = Field(default_factory=list)
+    toolCalls: list[ToolCallItem] = Field(default_factory=list)
+    retrievedChunks: list[RetrievedChunkResponse] = Field(default_factory=list)
     errorMessage: str | None = None
     createdAt: datetime
 

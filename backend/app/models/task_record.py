@@ -17,6 +17,8 @@ class TaskRecord(Base):
     steps_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     timeline_json: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     result_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    agent_trace_json: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    tool_calls_json: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     retrieved_chunks_json: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

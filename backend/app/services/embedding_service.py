@@ -7,6 +7,8 @@ from app.core.config import settings
 
 
 class EmbeddingService:
+    max_document_embeddings = 12
+
     def __init__(self) -> None:
         self.api_key = settings.gemini_api_key.strip()
         self.model = "text-embedding-004"
@@ -20,7 +22,10 @@ class EmbeddingService:
             return [None for _ in texts]
 
         embeddings: list[list[float] | None] = []
-        for text in texts:
+        for index, text in enumerate(texts):
+            if index >= self.max_document_embeddings:
+                embeddings.append(None)
+                continue
             embeddings.append(self._embed(text=text, task_type="RETRIEVAL_DOCUMENT"))
         return embeddings
 
@@ -57,7 +62,7 @@ class EmbeddingService:
         http_request = request.Request(url=url, data=payload, headers=headers, method="POST")
 
         try:
-            with request.urlopen(http_request, timeout=20) as response:
+            with request.urlopen(http_request, timeout=10) as response:
                 data = json.loads(response.read().decode("utf-8"))
         except (error.URLError, TimeoutError, JSONDecodeError):
             return None

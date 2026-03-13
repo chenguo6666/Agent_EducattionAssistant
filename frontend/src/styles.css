@@ -1028,3 +1028,168 @@ textarea {
     width: 100%;
   }
 }
+
+.agent-trace-card {
+  width: min(920px, calc(100% - 32px));
+  margin: 0 auto 18px;
+  padding: 18px 20px;
+  border-radius: 24px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.05);
+}
+
+.agent-trace-card.loading {
+  background: rgba(246, 248, 251, 0.95);
+}
+
+.agent-trace-header,
+.agent-tool-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-trace-eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4f6b95;
+}
+
+.agent-trace-title {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: #122033;
+}
+
+.agent-trace-badges,
+.agent-trace-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-trace-badges {
+  justify-content: flex-end;
+}
+
+.trace-badge,
+.trace-stage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: #f6f8fb;
+  color: #41556f;
+  font-size: 0.85rem;
+}
+
+.trace-badge.thinking,
+.trace-badge.running,
+.trace-stage-pill.executing,
+.trace-stage-pill.analyzing {
+  background: rgba(16, 163, 127, 0.12);
+  color: #0f7b45;
+}
+
+.trace-badge.completed,
+.trace-stage-pill.completed,
+.trace-stage-pill.submitted {
+  background: rgba(15, 123, 69, 0.1);
+  color: #0f7b45;
+}
+
+.trace-badge.failed,
+.trace-stage-pill.failed {
+  background: rgba(194, 65, 12, 0.12);
+  color: #c2410c;
+}
+
+.agent-trace-timeline {
+  margin-top: 14px;
+}
+
+.agent-trace-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.agent-trace-item {
+  display: flex;
+  gap: 12px;
+}
+
+.trace-item-status {
+  width: 10px;
+  min-width: 10px;
+  height: 10px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.trace-item-status.running {
+  background: #10a37f;
+  box-shadow: 0 0 0 6px rgba(16, 163, 127, 0.12);
+}
+
+.trace-item-status.completed {
+  background: #0f7b45;
+}
+
+.trace-item-status.failed {
+  background: #c2410c;
+}
+
+.trace-item-body strong,
+.agent-tool-head strong {
+  display: block;
+  color: #122033;
+}
+
+.trace-item-body p,
+.agent-tool-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.agent-tool-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.agent-tool-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+@media (max-width: 768px) {
+  .agent-trace-card {
+    width: min(100%, calc(100% - 16px));
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .agent-trace-header,
+  .agent-tool-head {
+    flex-direction: column;
+  }
+
+  .agent-trace-badges {
+    justify-content: flex-start;
+  }
+}

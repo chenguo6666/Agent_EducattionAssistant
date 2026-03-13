@@ -66,9 +66,12 @@ class AcceptanceTestCase(unittest.TestCase):
             files={
                 "file": (
                     "lesson.txt",
-                    "工业革命推动了生产力发展，也引发了城市化进程。"
-                    "机器生产逐渐取代手工劳动，工厂制度开始形成。"
-                    "随着交通和通信改善，商品流通效率提升，但也带来了贫富分化和劳动条件恶化等社会问题。",
+                    (
+                        "工业革命推动了生产力发展，也引发了城市化进程。"
+                        "机器生产逐渐取代手工劳动，工厂制度开始形成。"
+                        "随着交通和通信改善，商品流通效率提升，"
+                        "但也带来了贫富分化和劳动条件恶化等社会问题。"
+                    ),
                     "text/plain",
                 )
             },
@@ -89,6 +92,10 @@ class AcceptanceTestCase(unittest.TestCase):
         self.assertEqual(summary_payload["intent"], "summary_and_quiz")
         self.assertEqual(len(summary_payload["result"]["quiz"]), 5)
         self.assertTrue(summary_payload["recordId"])
+        self.assertGreaterEqual(len(summary_payload["agentTrace"]), 3)
+        self.assertGreaterEqual(len(summary_payload["toolCalls"]), 2)
+        self.assertEqual(summary_payload["toolCalls"][0]["toolName"], "summarize_material")
+        self.assertEqual(summary_payload["toolCalls"][1]["toolName"], "generate_quiz")
 
         export_response = self.client.get(f"/api/chat/records/{summary_payload['recordId']}/export", headers=headers)
         self.assertEqual(export_response.status_code, 200)
@@ -106,6 +113,8 @@ class AcceptanceTestCase(unittest.TestCase):
         qa_payload = qa_response.json()
         self.assertEqual(qa_payload["intent"], "rag_answer")
         self.assertGreaterEqual(len(qa_payload["retrievedChunks"]), 1)
+        self.assertEqual(qa_payload["toolCalls"][0]["toolName"], "retrieve_document_chunks")
+        self.assertEqual(qa_payload["toolCalls"][1]["toolName"], "answer_with_context")
 
         attempt_response = self.client.post(
             f"/api/chat/records/{summary_payload['recordId']}/quiz-attempt",
@@ -139,6 +148,93 @@ class AcceptanceTestCase(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["intent"], "assistant_chat")
         self.assertTrue(payload["result"]["answer"])
+        self.assertGreaterEqual(len(payload["agentTrace"]), 2)
+        self.assertEqual(payload["toolCalls"], [])
+
+    def test_exam_prediction_phrase_routes_to_quiz(self):
+        _, headers = self.create_user_and_login()
+
+        response = self.client.post(
+            "/api/chat/execute",
+            headers=headers,
+            json={"message": "我快考试了，帮我看看可能考哪些题"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["intent"], "quiz")
+        self.assertEqual(payload["toolCalls"][0]["toolName"], "generate_quiz")
+        self.assertTrue(payload["result"]["quiz"])
+
+    def test_key_points_and_outline_tasks_return_structured_trace(self):
+        _, headers = self.create_user_and_login()
+
+        upload_response = self.client.post(
+            "/api/documents/upload",
+            headers=headers,
+            files={
+                "file": (
+                    "biology.txt",
+                    (
+                        "细胞膜控制物质进出细胞，细胞核负责遗传信息存储，"
+                        "线粒体参与能量转换，核糖体负责蛋白质合成。"
+                    ),
+                    "text/plain",
+                )
+            },
+        )
+        self.assertEqual(upload_response.status_code, 200)
+        session_id = upload_response.json()["sessionId"]
+
+        key_points_response = self.client.post(
+            "/api/chat/execute",
+            headers=headers,
+            json={"message": "请提取这份资料的核心知识点", "sessionId": session_id},
+        )
+        self.assertEqual(key_points_response.status_code, 200)
+        key_points_payload = key_points_response.json()
+        self.assertEqual(key_points_payload["intent"], "key_points")
+        self.assertEqual(key_points_payload["toolCalls"][0]["toolName"], "extract_key_points")
+        self.assertTrue(key_points_payload["result"]["answer"])
+
+        outline_response = self.client.post(
+            "/api/chat/execute",
+            headers=headers,
+            json={"message": "请生成这份资料的复习提纲", "sessionId": session_id},
+        )
+        self.assertEqual(outline_response.status_code, 200)
+        outline_payload = outline_response.json()
+        self.assertEqual(outline_payload["intent"], "study_outline")
+        self.assertEqual(outline_payload["toolCalls"][0]["toolName"], "build_study_outline")
+        self.assertTrue(outline_payload["result"]["answer"])
+
+    def test_document_check_task_returns_fast_structured_answer(self):
+        _, headers = self.create_user_and_login()
+
+        upload_response = self.client.post(
+            "/api/documents/upload",
+            headers=headers,
+            files={
+                "file": (
+                    "note.txt",
+                    "这是一个很短的测试文件，用来确认系统能否看到当前会话资料。",
+                    "text/plain",
+                )
+            },
+        )
+        self.assertEqual(upload_response.status_code, 200)
+        session_id = upload_response.json()["sessionId"]
+
+        response = self.client.post(
+            "/api/chat/execute",
+            headers=headers,
+            json={"message": "你能看到我刚上传的文件吗", "sessionId": session_id},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["intent"], "document_check")
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["toolCalls"], [])
+        self.assertIn("note.txt", payload["result"]["answer"])
 
     def test_invalid_token_returns_401(self):
         response = self.client.get("/api/auth/me", headers={"Authorization": "Bearer invalid-token"})

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import OperationalError
 from sqlalchemy import inspect, text
 
 from app.api.routes.auth import router as auth_router
@@ -26,6 +27,8 @@ def upgrade_sqlite_schema() -> None:
             "session_id": "ALTER TABLE task_records ADD COLUMN session_id VARCHAR(36)",
             "steps_json": "ALTER TABLE task_records ADD COLUMN steps_json JSON DEFAULT '[]' NOT NULL",
             "timeline_json": "ALTER TABLE task_records ADD COLUMN timeline_json JSON DEFAULT '[]' NOT NULL",
+            "agent_trace_json": "ALTER TABLE task_records ADD COLUMN agent_trace_json JSON DEFAULT '[]' NOT NULL",
+            "tool_calls_json": "ALTER TABLE task_records ADD COLUMN tool_calls_json JSON DEFAULT '[]' NOT NULL",
             "retrieved_chunks_json": "ALTER TABLE task_records ADD COLUMN retrieved_chunks_json JSON DEFAULT '[]' NOT NULL",
             "error_message": "ALTER TABLE task_records ADD COLUMN error_message TEXT",
         }
@@ -33,7 +36,11 @@ def upgrade_sqlite_schema() -> None:
         with engine.begin() as connection:
             for column_name, statement in required_columns.items():
                 if column_name not in existing_columns:
-                    connection.execute(text(statement))
+                    try:
+                        connection.execute(text(statement))
+                    except OperationalError as error:
+                        if "duplicate column name" not in str(error).lower():
+                            raise
 
     if "document_chunks" in table_names:
         existing_columns = {column["name"] for column in inspector.get_columns("document_chunks")}

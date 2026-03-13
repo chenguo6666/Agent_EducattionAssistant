@@ -94,11 +94,14 @@ const emit = defineEmits<{
 }>();
 
 const intentMap: Record<string, string> = {
-  summary: "仅摘要",
-  quiz: "仅出题",
-  summary_and_quiz: "摘要 + 出题",
+  summary: "摘要",
+  quiz: "出题",
+  summary_and_quiz: "综合任务",
   rag_answer: "资料追问",
   assistant_chat: "自由对话",
+  key_points: "知识点提取",
+  study_outline: "复习提纲",
+  document_check: "资料确认",
   unknown: "兜底处理",
 };
 

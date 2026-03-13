@@ -9,7 +9,7 @@ import type {
 } from "@/types/chat";
 
 export function executeTask(message: string, token: string, sessionId?: string) {
-  return request<ChatResponse>("/api/chat/execute", "POST", { message, sessionId }, token);
+  return request<ChatResponse>("/api/chat/execute", "POST", { message, sessionId }, token, { timeoutMs: 45000 });
 }
 
 export function fetchSessions(token: string) {
@@ -29,7 +29,7 @@ export function submitQuizAttempt(
   answers: Array<{ questionIndex: number; userAnswer: string }>,
   token: string,
 ) {
-  return request<QuizAttemptResponse>(`/api/chat/records/${recordId}/quiz-attempt`, "POST", { answers }, token);
+  return request<QuizAttemptResponse>(`/api/chat/records/${recordId}/quiz-attempt`, "POST", { answers }, token, { timeoutMs: 20000 });
 }
 
 export function fetchMistakes(token: string) {

@@ -1,8 +1,24 @@
 export type TaskStatus = "submitted" | "analyzing" | "executing" | "completed" | "failed";
+export type TraceStatus = "pending" | "running" | "completed" | "failed";
 
 export interface TaskStage {
   status: TaskStatus;
   label: string;
+}
+
+export interface AgentTraceItem {
+  type: "analysis" | "tool" | "final";
+  label: string;
+  status: TraceStatus;
+  summary?: string | null;
+}
+
+export interface ToolCallItem {
+  toolName: string;
+  displayName: string;
+  status: TraceStatus;
+  inputSummary?: string | null;
+  outputSummary?: string | null;
 }
 
 export interface QuizItem {
@@ -78,6 +94,8 @@ export interface ChatResponse {
   steps: string[];
   timeline: TaskStage[];
   result: ChatResult;
+  agentTrace: AgentTraceItem[];
+  toolCalls: ToolCallItem[];
   usedDocuments: DocumentSummary[];
   retrievedChunks: RetrievedChunk[];
 }
@@ -90,6 +108,8 @@ export interface TaskRecord {
   steps: string[];
   timeline: TaskStage[];
   result: ChatResult;
+  agentTrace: AgentTraceItem[];
+  toolCalls: ToolCallItem[];
   retrievedChunks: RetrievedChunk[];
   errorMessage?: string | null;
   createdAt: string;

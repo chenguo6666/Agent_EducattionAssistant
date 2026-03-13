@@ -19,6 +19,7 @@ from app.services.session_service import SessionService
 class DocumentService:
     allowed_suffixes = {".txt", ".md", ".pdf", ".docx"}
     max_file_size = 5 * 1024 * 1024
+    lazy_embedding_threshold = 300 * 1024
 
     def __init__(self) -> None:
         self.session_service = SessionService()
@@ -70,7 +71,9 @@ class DocumentService:
         db.flush()
 
         chunks = self._chunk_text(extracted_text)
-        embeddings = self.embedding_service.embed_documents(chunks)
+        embeddings = [None for _ in chunks]
+        if len(content) <= self.lazy_embedding_threshold:
+            embeddings = self.embedding_service.embed_documents(chunks)
         for index, chunk_text in enumerate(chunks):
             db.add(
                 DocumentChunk(
@@ -150,7 +153,7 @@ class DocumentService:
                 continue
         return content.decode("latin-1", errors="ignore")
 
-    def _chunk_text(self, text: str, chunk_size: int = 600, overlap: int = 120) -> list[str]:
+    def _chunk_text(self, text: str, chunk_size: int = 900, overlap: int = 120) -> list[str]:
         normalized = " ".join(text.replace("\r", "\n").split())
         if not normalized:
             return []
@@ -175,4 +178,4 @@ class DocumentService:
                 break
             start = max(end - overlap, start + 1)
 
-        return chunks[:100]
+        return chunks[:30]

@@ -33,38 +33,12 @@
           </div>
         </section>
 
-        <details class="sidebar-disclosure">
-          <summary>Agent 面板</summary>
-          <div class="sidebar-disclosure-content">
-            <div class="agent-strip-group">
-              <span class="status-label">执行阶段</span>
-              <div class="agent-strip-pills">
-                <span
-                  v-for="stage in stageCards"
-                  :key="stage.status"
-                  class="stage-pill"
-                  :class="stage.stateClass"
-                >
-                  {{ stage.title }} · {{ stage.stateLabel }}
-                </span>
-              </div>
-            </div>
-            <div class="agent-strip-group">
-              <span class="status-label">执行计划</span>
-              <div class="plan-inline">
-                <span v-for="step in planSteps" :key="step" class="plan-inline-item">{{ step }}</span>
-                <span v-if="planSteps.length === 0" class="plan-inline-item muted">等待任务分析</span>
-              </div>
-            </div>
-          </div>
-        </details>
-
         <section class="sidebar-section">
           <div class="session-panel-header">
             <p class="sidebar-section-title">最近错题</p>
             <span class="muted">{{ mistakes.length }} 条</span>
           </div>
-          <div v-if="mistakes.length === 0" class="session-empty">提交选择题作答后，答错的题会记录在这里。</div>
+          <div v-if="mistakes.length === 0" class="session-empty">提交选择题作答后，错题会显示在这里。</div>
           <div v-else class="mistake-list compact-list">
             <article v-for="mistake in mistakes" :key="mistake.id" class="mistake-item">
               <strong>{{ mistake.question }}</strong>
@@ -78,19 +52,11 @@
       <div class="sidebar-bottom">
         <div class="sidebar-meta">
           <span class="status-label">当前用户</span>
-          <strong>{{ authStore.username || "未命名用户" }}</strong>
+          <strong>{{ authStore.username || "未登录用户" }}</strong>
         </div>
         <div class="sidebar-meta">
           <span class="status-label">当前会话</span>
           <strong>{{ activeSessionTitle }}</strong>
-        </div>
-        <div class="sidebar-meta">
-          <span class="status-label">任务状态</span>
-          <strong>{{ currentStatusLabel }}</strong>
-        </div>
-        <div class="sidebar-meta">
-          <span class="status-label">识别意图</span>
-          <strong>{{ intent || "等待提交" }}</strong>
         </div>
         <button class="secondary-button sidebar-logout" type="button" @click="logout">退出登录</button>
       </div>
@@ -101,11 +67,10 @@
         <div class="topbar-title">
           <button class="icon-action-button sidebar-toggle-inline" type="button" @click="toggleSidebar">菜单</button>
           <strong>Education Assistant</strong>
-          <span class="muted">教育助手 AI Agent</span>
+          <span class="muted">{{ activeSessionTitle }}</span>
         </div>
         <div class="header-badges">
-          <span class="stage-pill">{{ documents.length > 0 ? "资料模式" : "自由聊天" }}</span>
-          <span class="stage-pill">{{ intent || "等待指令" }}</span>
+          <span class="stage-pill">{{ documents.length > 0 ? `${documents.length} 份资料` : "自由聊天" }}</span>
         </div>
       </header>
 
@@ -113,6 +78,17 @@
         <div v-if="loadingHistory" class="chat-area-empty">正在加载对话内容...</div>
         <template v-else v-for="message in messages" :key="message.id">
           <MessageBubble v-if="message.kind === 'text'" :role="message.role" :content="message.content ?? ''" />
+
+          <AgentTraceCard
+            v-else-if="message.kind === 'trace'"
+            :intent="message.intent"
+            :status="message.status"
+            :timeline="message.timeline"
+            :agent-trace="message.agentTrace"
+            :tool-calls="message.toolCalls"
+            :loading="message.loading"
+          />
+
           <TaskResultCard
             v-else-if="message.kind === 'result'"
             :intent="message.intent ?? 'unknown'"
@@ -124,6 +100,7 @@
             @retry="retryMessage(message)"
             @submit-quiz="handleQuizSubmit(message.recordId, $event)"
           />
+
           <TaskErrorCard
             v-else
             :message="message.errorMessage ?? '请求失败'"
@@ -167,7 +144,12 @@
             </div>
           </div>
 
-          <textarea v-model="draft" rows="1" placeholder="有问题，尽管问" />
+          <textarea
+            v-model="draft"
+            rows="1"
+            placeholder="有问题，尽管问"
+            :disabled="submitting || checkingSession || loadingHistory"
+          />
 
           <div class="chat-actions">
             <span class="muted">支持自由对话、资料追问、摘要生成、题目生成和结果导出。</span>
@@ -199,11 +181,13 @@ import {
   submitQuizAttempt,
 } from "@/api/chat";
 import { uploadDocument } from "@/api/documents";
+import AgentTraceCard from "@/components/AgentTraceCard.vue";
 import MessageBubble from "@/components/MessageBubble.vue";
 import TaskErrorCard from "@/components/TaskErrorCard.vue";
 import TaskResultCard from "@/components/TaskResultCard.vue";
 import { useAuthStore } from "@/stores/auth";
 import type {
+  AgentTraceItem,
   ChatResponse,
   ChatResult,
   ChatSessionSummary,
@@ -213,9 +197,10 @@ import type {
   TaskRecord,
   TaskStage,
   TaskStatus,
+  ToolCallItem,
 } from "@/types/chat";
 
-type MessageKind = "text" | "result" | "error";
+type MessageKind = "text" | "trace" | "result" | "error";
 
 interface MessageItem {
   id: string;
@@ -228,6 +213,11 @@ interface MessageItem {
   sources?: RetrievedChunk[];
   quizFeedback?: string;
   intent?: string;
+  status?: TaskStatus | "thinking";
+  timeline?: TaskStage[];
+  agentTrace?: AgentTraceItem[];
+  toolCalls?: ToolCallItem[];
+  loading?: boolean;
   errorMessage?: string;
   errorHint?: string;
 }
@@ -236,27 +226,18 @@ const router = useRouter();
 const authStore = useAuthStore();
 const messageListRef = ref<HTMLElement | null>(null);
 
-const defaultDraft = "";
 const isSidebarOpen = ref(window.innerWidth > 1080);
-
-const draft = ref(defaultDraft);
+const draft = ref("");
 const selectedTemplate = ref("");
 const submitting = ref(false);
 const uploadingDocument = ref(false);
 const checkingSession = ref(true);
 const loadingSessions = ref(false);
 const loadingHistory = ref(false);
-const status = ref<TaskStatus | "idle">("idle");
-const intent = ref("");
-const planSteps = ref<string[]>([]);
-const currentStatusLabel = ref("等待提交");
-const progressTimers: number[] = [];
 const composerError = ref("");
 const composerNotice = ref("");
 const lastSubmittedMessage = ref("");
 const sessionError = ref("");
-const documentFeedback = ref("");
-const documentFeedbackType = ref<"error" | "success">("success");
 const sessions = ref<ChatSessionSummary[]>([]);
 const documents = ref<DocumentSummary[]>([]);
 const mistakes = ref<MistakeItem[]>([]);
@@ -267,68 +248,25 @@ const messages = ref<MessageItem[]>(createWelcomeMessages());
 const presetTemplates = [
   {
     label: "自由聊天",
-    description: "不上传资料，直接提学习问题",
     prompt: "请先根据我的情况给我一些学习建议：",
   },
   {
     label: "总结 + 出题",
-    description: "适合上传资料后的复习场景",
     prompt: "请根据当前资料总结重点，并生成 5 个选择题帮助我复习。",
   },
   {
     label: "资料追问",
-    description: "围绕当前资料继续发问",
     prompt: "请根据当前资料回答：",
   },
+  {
+    label: "知识点提取",
+    prompt: "请提取这份资料的核心知识点。",
+  },
+  {
+    label: "复习提纲",
+    prompt: "请生成这份资料的复习提纲。",
+  },
 ];
-
-const stageLabelMap: Record<TaskStatus, string> = {
-  submitted: "任务已提交",
-  analyzing: "分析中",
-  executing: "执行中",
-  completed: "已完成",
-  failed: "执行失败",
-};
-
-const orderedStages: TaskStatus[] = ["submitted", "analyzing", "executing", "completed"];
-const stageTitleMap: Record<TaskStatus, string> = {
-  submitted: "提交",
-  analyzing: "分析",
-  executing: "执行",
-  completed: "完成",
-  failed: "失败",
-};
-
-const stageCards = computed(() => {
-  const currentIndex = status.value === "idle" ? -1 : orderedStages.indexOf(status.value as TaskStatus);
-  return orderedStages.map((stageStatus, index) => {
-    let stateClass = "pending";
-    let stateLabel = "待执行";
-
-    if (status.value === "failed") {
-      if (index < 2) {
-        stateClass = "completed";
-        stateLabel = "已完成";
-      } else if (stageStatus === "executing") {
-        stateClass = "failed";
-        stateLabel = "失败";
-      }
-    } else if (currentIndex > index) {
-      stateClass = "completed";
-      stateLabel = "已完成";
-    } else if (currentIndex === index) {
-      stateClass = "active";
-      stateLabel = stageStatus === "completed" ? "已完成" : "进行中";
-    }
-
-    return {
-      status: stageStatus,
-      title: stageTitleMap[stageStatus],
-      stateClass,
-      stateLabel,
-    };
-  });
-});
 
 const canRetryLastTask = computed(() => Boolean(lastSubmittedMessage.value) && !submitting.value);
 
@@ -338,19 +276,87 @@ function createWelcomeMessages(): MessageItem[] {
       id: "welcome",
       role: "assistant",
       kind: "text",
-      content:
-        "你好，我可以直接作为学习助手和你对话，也可以在上传资料后帮你总结、出题和进行资料追问。你可以直接开始提问。",
+      content: "你好，我可以直接和你对话，也可以在上传资料后帮助你做总结、出题、提取知识点、生成提纲和资料追问。",
     },
   ];
 }
 
-function clearProgressTimers() {
-  while (progressTimers.length > 0) {
-    const timer = progressTimers.pop();
-    if (timer !== undefined) {
-      window.clearTimeout(timer);
-    }
+function createPendingTrace(prompt: string): MessageItem {
+  return {
+    id: `trace-${crypto.randomUUID()}`,
+    role: "assistant",
+    kind: "trace",
+    prompt,
+    status: "thinking",
+    loading: true,
+    timeline: [
+      { status: "submitted", label: "任务已提交" },
+      { status: "analyzing", label: "分析中" },
+      { status: "executing", label: "执行中" },
+    ],
+    agentTrace: [],
+    toolCalls: [],
+  };
+}
+
+function createTraceFromResponse(response: ChatResponse, prompt: string): MessageItem {
+  return {
+    id: `trace-record-${response.recordId}`,
+    role: "assistant",
+    kind: "trace",
+    prompt,
+    intent: response.intent,
+    status: response.status,
+    timeline: response.timeline,
+    agentTrace: response.agentTrace,
+    toolCalls: response.toolCalls,
+    loading: false,
+  };
+}
+
+function createTraceFromTask(task: TaskRecord): MessageItem {
+  return {
+    id: `trace-record-${task.id}`,
+    role: "assistant",
+    kind: "trace",
+    prompt: task.message,
+    intent: task.intent,
+    status: task.status,
+    timeline: task.timeline,
+    agentTrace: task.agentTrace,
+    toolCalls: task.toolCalls,
+    loading: false,
+  };
+}
+
+function createFailedTrace(prompt: string, messageText: string): MessageItem {
+  return {
+    id: `trace-error-${crypto.randomUUID()}`,
+    role: "assistant",
+    kind: "trace",
+    prompt,
+    status: "failed",
+    loading: false,
+    timeline: [
+      { status: "submitted", label: "任务已提交" },
+      { status: "analyzing", label: "分析中" },
+      { status: "failed", label: "任务失败" },
+    ],
+    agentTrace: [
+      { type: "analysis", label: "识别任务意图", status: "completed", summary: "已开始分析用户需求。" },
+      { type: "final", label: "返回错误结果", status: "failed", summary: messageText },
+    ],
+    toolCalls: [],
+  };
+}
+
+function replaceMessage(messageId: string, nextMessage: MessageItem) {
+  const index = messages.value.findIndex((item) => item.id === messageId);
+  if (index === -1) {
+    messages.value.push(nextMessage);
+    return;
   }
+  messages.value.splice(index, 1, nextMessage);
 }
 
 function resetFeedback() {
@@ -366,100 +372,11 @@ function closeSidebar() {
   isSidebarOpen.value = false;
 }
 
-function updateProgress(statusValue: TaskStatus, label: string) {
-  status.value = statusValue;
-  currentStatusLabel.value = label;
-}
-
-function resetInspectorState() {
-  status.value = "idle";
-  currentStatusLabel.value = "等待提交";
-  intent.value = "";
-  planSteps.value = [];
-}
-
-function resetDocumentFeedback() {
-  documentFeedback.value = "";
-  documentFeedbackType.value = "success";
-}
-
-function startPendingProgress() {
-  resetFeedback();
-  planSteps.value = [];
-  updateProgress("submitted", stageLabelMap.submitted);
-
-  progressTimers.push(
-    window.setTimeout(() => {
-      if (submitting.value) {
-        updateProgress("analyzing", stageLabelMap.analyzing);
-      }
-    }, 200),
-  );
-
-  progressTimers.push(
-    window.setTimeout(() => {
-      if (submitting.value) {
-        updateProgress("executing", stageLabelMap.executing);
-      }
-    }, 800),
-  );
-}
-
-function applyCompletedTimeline(response: ChatResponse) {
-  status.value = response.status;
-  currentStatusLabel.value = stageLabelMap[response.status];
-  planSteps.value = Array.from(new Set([...response.timeline.map((item: TaskStage) => item.label), ...response.steps]));
-}
-
-function applyTaskRecordState(record: TaskRecord) {
-  status.value = record.status;
-  currentStatusLabel.value = stageLabelMap[record.status];
-  intent.value = record.intent;
-  planSteps.value = Array.from(new Set([...record.timeline.map((item: TaskStage) => item.label), ...record.steps]));
-}
-
-function hydrateMessagesFromTasks(tasks: TaskRecord[]) {
-  if (tasks.length === 0) {
-    messages.value = createWelcomeMessages();
-    resetInspectorState();
-    return;
+async function scrollToBottom() {
+  await nextTick();
+  if (messageListRef.value) {
+    messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
   }
-
-  const nextMessages: MessageItem[] = [];
-  for (const task of tasks) {
-    nextMessages.push({
-      id: `user-${task.id}`,
-      role: "user",
-      kind: "text",
-      content: task.message,
-    });
-
-    if (task.errorMessage) {
-      nextMessages.push({
-        id: `assistant-error-${task.id}`,
-        role: "assistant",
-        kind: "error",
-        prompt: task.message,
-        errorMessage: task.errorMessage,
-        errorHint: "这是历史执行记录中的失败结果。",
-      });
-    } else {
-      nextMessages.push({
-        id: `assistant-result-${task.id}`,
-        role: "assistant",
-        kind: "result",
-        recordId: task.id,
-        intent: task.intent,
-        prompt: task.message,
-        result: task.result,
-        sources: task.retrievedChunks,
-      });
-    }
-  }
-
-  messages.value = nextMessages;
-  applyTaskRecordState(tasks[tasks.length - 1]);
-  void scrollToBottom();
 }
 
 function formatSessionTime(value: string) {
@@ -471,24 +388,18 @@ function formatSessionTime(value: string) {
   });
 }
 
-async function scrollToBottom() {
-  await nextTick();
-  if (messageListRef.value) {
-    messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
-  }
-}
-
 function startNewSession() {
-  clearProgressTimers();
+  submitting.value = false;
+  uploadingDocument.value = false;
+  checkingSession.value = false;
+  loadingHistory.value = false;
   activeSessionId.value = "";
   activeSessionTitle.value = "新对话";
-  draft.value = defaultDraft;
+  draft.value = "";
   sessionError.value = "";
   documents.value = [];
   messages.value = createWelcomeMessages();
-  resetInspectorState();
   resetFeedback();
-  resetDocumentFeedback();
   closeSidebar();
   void scrollToBottom();
 }
@@ -496,15 +407,14 @@ function startNewSession() {
 function applyTemplate(prompt: string) {
   draft.value = prompt;
   resetFeedback();
-  closeSidebar();
 }
 
 function handleTemplateSelect() {
-  const matchedTemplate = presetTemplates.find((template) => template.label === selectedTemplate.value);
-  if (!matchedTemplate) {
+  const template = presetTemplates.find((item) => item.label === selectedTemplate.value);
+  if (!template) {
     return;
   }
-  applyTemplate(matchedTemplate.prompt);
+  applyTemplate(template.prompt);
   selectedTemplate.value = "";
 }
 
@@ -521,7 +431,6 @@ function triggerDownload(fileName: string, content: string) {
 }
 
 function logout() {
-  clearProgressTimers();
   authStore.clearSession();
   router.push("/login");
 }
@@ -534,6 +443,50 @@ async function handleAuthError(error: unknown) {
     return true;
   }
   return false;
+}
+
+function hydrateMessagesFromTasks(tasks: TaskRecord[]) {
+  if (tasks.length === 0) {
+    messages.value = createWelcomeMessages();
+    return;
+  }
+
+  const nextMessages: MessageItem[] = [];
+  for (const task of tasks) {
+    nextMessages.push({
+      id: `user-${task.id}`,
+      role: "user",
+      kind: "text",
+      content: task.message,
+    });
+    nextMessages.push(createTraceFromTask(task));
+
+    if (task.errorMessage) {
+      nextMessages.push({
+        id: `assistant-error-${task.id}`,
+        role: "assistant",
+        kind: "error",
+        prompt: task.message,
+        errorMessage: task.errorMessage,
+        errorHint: "这是历史执行记录中的失败结果。",
+      });
+      continue;
+    }
+
+    nextMessages.push({
+      id: `assistant-result-${task.id}`,
+      role: "assistant",
+      kind: "result",
+      recordId: task.id,
+      intent: task.intent,
+      prompt: task.message,
+      result: task.result,
+      sources: task.retrievedChunks,
+    });
+  }
+
+  messages.value = nextMessages;
+  void scrollToBottom();
 }
 
 async function loadSessionList() {
@@ -561,7 +514,6 @@ async function loadMistakes() {
   if (!authStore.token) {
     return;
   }
-
   try {
     const response = await fetchMistakes(authStore.token);
     mistakes.value = response.items;
@@ -577,7 +529,6 @@ async function openSession(sessionId: string) {
 
   loadingHistory.value = true;
   sessionError.value = "";
-  resetDocumentFeedback();
 
   try {
     const detail = await fetchSessionDetail(sessionId, authStore.token);
@@ -599,7 +550,7 @@ async function openSession(sessionId: string) {
 async function validateSession() {
   if (!authStore.token) {
     checkingSession.value = false;
-    router.replace("/login");
+    await router.replace("/login");
     return;
   }
 
@@ -614,7 +565,7 @@ async function validateSession() {
     }
   } catch {
     authStore.clearSession();
-    router.replace("/login");
+    await router.replace("/login");
   } finally {
     checkingSession.value = false;
   }
@@ -643,10 +594,10 @@ function buildCopyText(message: MessageItem) {
 
   const parts: string[] = [];
   if (message.result.answer) {
-    parts.push(`回答内容\n${message.result.answer}`);
+    parts.push(message.result.answer);
   }
   if (message.result.summary) {
-    parts.push(`摘要结果\n${message.result.summary}`);
+    parts.push(message.result.summary);
   }
   if (message.result.quiz?.length) {
     parts.push(
@@ -694,18 +645,14 @@ async function handleFileChange(event: Event) {
   }
 
   uploadingDocument.value = true;
-  resetDocumentFeedback();
-  documentFeedback.value = `正在上传：${file.name}`;
-  documentFeedbackType.value = "success";
-  composerNotice.value = documentFeedback.value;
+  resetFeedback();
+  composerNotice.value = `正在上传：${file.name}`;
 
   try {
     const uploaded = await uploadDocument(file, authStore.token, activeSessionId.value || undefined);
     activeSessionId.value = uploaded.sessionId;
     documents.value = [...documents.value.filter((item) => item.documentId !== uploaded.documentId), uploaded];
-    documentFeedback.value = `资料已上传：${uploaded.fileName}`;
-    documentFeedbackType.value = "success";
-    composerNotice.value = documentFeedback.value;
+    composerNotice.value = `资料已上传：${uploaded.fileName}`;
     await loadSessionList();
     const currentSession = sessions.value.find((item) => item.sessionId === uploaded.sessionId);
     activeSessionTitle.value = currentSession?.title ?? activeSessionTitle.value;
@@ -713,9 +660,7 @@ async function handleFileChange(event: Event) {
     if (await handleAuthError(error)) {
       return;
     }
-    documentFeedback.value = error instanceof Error ? error.message : "资料上传失败";
-    documentFeedbackType.value = "error";
-    composerError.value = documentFeedback.value;
+    composerError.value = error instanceof Error ? error.message : "资料上传失败";
     composerNotice.value = "";
   } finally {
     uploadingDocument.value = false;
@@ -759,31 +704,31 @@ async function handleQuizSubmit(recordId: number | undefined, answers: Array<{ q
 }
 
 async function sendMessage(message: string) {
+  const pendingTrace = createPendingTrace(message);
+
   messages.value.push({
-    id: crypto.randomUUID(),
+    id: `user-${crypto.randomUUID()}`,
     role: "user",
     kind: "text",
     content: message,
   });
+  messages.value.push(pendingTrace);
 
   draft.value = "";
   submitting.value = true;
   resetFeedback();
-  intent.value = "";
   lastSubmittedMessage.value = message;
-  startPendingProgress();
   closeSidebar();
   await scrollToBottom();
 
   try {
     const response = await executeTask(message, authStore.token, activeSessionId.value || undefined);
-    clearProgressTimers();
     activeSessionId.value = response.sessionId;
-    applyCompletedTimeline(response);
-    intent.value = response.intent;
     if (response.usedDocuments.length > 0) {
       documents.value = response.usedDocuments;
     }
+
+    replaceMessage(pendingTrace.id, createTraceFromResponse(response, message));
     messages.value.push({
       id: response.taskId,
       role: "assistant",
@@ -794,29 +739,27 @@ async function sendMessage(message: string) {
       result: response.result,
       sources: response.retrievedChunks,
     });
+
     await loadSessionList();
     const currentSession = sessions.value.find((item) => item.sessionId === response.sessionId);
     activeSessionTitle.value = currentSession?.title ?? activeSessionTitle.value;
     await scrollToBottom();
   } catch (error) {
-    clearProgressTimers();
     if (await handleAuthError(error)) {
       return;
     }
     const messageText = error instanceof Error ? error.message : "请求失败";
-    status.value = "failed";
-    currentStatusLabel.value = stageLabelMap.failed;
-    planSteps.value = [stageLabelMap.submitted, stageLabelMap.analyzing, "任务执行中断，请检查输入后重试"];
-    composerError.value = "任务执行失败，可以直接重新回答上一条消息。";
-    composerNotice.value = "";
+    replaceMessage(pendingTrace.id, createFailedTrace(message, messageText));
     messages.value.push({
-      id: crypto.randomUUID(),
+      id: `error-${crypto.randomUUID()}`,
       role: "assistant",
       kind: "error",
       prompt: message,
       errorMessage: messageText,
-      errorHint: "可以点击“重新回答”，或者修改描述后重新发送。",
+      errorHint: "可以点击“重新回答”，或者修改问题后再次发送。",
     });
+    composerError.value = "任务执行失败，可以直接重新回答上一条消息。";
+    composerNotice.value = "";
     await scrollToBottom();
   } finally {
     submitting.value = false;
@@ -850,7 +793,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  clearProgressTimers();
   window.removeEventListener("resize", handleResize);
 });
 </script>

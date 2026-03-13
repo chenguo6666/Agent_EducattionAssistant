@@ -19,8 +19,8 @@
 
 - 前端：Vue 3、Vite、TypeScript、Vue Router、Pinia
 - 后端：FastAPI、SQLAlchemy、SQLite、Uvicorn
-- Agent 层：LangChain-ready 结构 + 可控规则规划
-- AI 能力：Gemini `generateContent` 与 `text-embedding-004`
+- Agent 层：LangChain Tool Calling Agent + 6 个预设工具 + fallback 规划
+- AI 能力：Gemini `generateContent`、`ChatGoogleGenerativeAI` 与 `text-embedding-004`
 - 文档处理：`pypdf`、`python-docx`
 
 说明：
@@ -38,8 +38,8 @@
 
 ### Agent 与教育任务
 
-- 任务意图识别：`summary`、`quiz`、`summary_and_quiz`、`rag_answer`
-- 执行步骤展示与状态时间线
+- 任务意图识别：`assistant_chat`、`summary`、`quiz`、`summary_and_quiz`、`key_points`、`study_outline`、`rag_answer`
+- 聊天框内联展示：`任务已提交 / 分析中 / 执行中 / 完成`、任务意图、工具调用轨迹
 - 结构化摘要结果
 - 多题选择题生成与提交作答
 - 基于当前资料的追问式问答
@@ -68,7 +68,7 @@
 2. 用户可先上传资料，再提交总结、出题或资料追问任务。
 3. 后端为任务绑定会话，读取当前会话资料与最近历史消息。
 4. 检索服务对文档分块执行关键词召回、向量相似度计算与 rerank。
-5. Agent 规划器识别任务类型，并调度 Gemini 或本地工具执行。
+5. LangChain Agent 识别任务类型，调用摘要、出题、知识点、提纲、检索、资料问答等工具执行。
 6. 结果、来源片段、步骤时间线、错题记录等信息写入数据库并返回前端。
 
 ## 目录结构

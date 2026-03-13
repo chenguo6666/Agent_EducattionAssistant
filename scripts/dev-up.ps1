@@ -24,7 +24,7 @@ function Stop-ExistingProcess {
 
     $process = Get-Process -Id ([int]$pidValue) -ErrorAction SilentlyContinue
     if ($null -ne $process) {
-        Stop-Process -Id $process.Id -Force
+        & taskkill /PID $process.Id /T /F | Out-Null
     }
 
     Remove-Item $PidFile -Force

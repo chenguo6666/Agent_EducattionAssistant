@@ -7,7 +7,7 @@ export function uploadDocument(file: File, token: string, sessionId?: string) {
   if (sessionId) {
     formData.append("sessionId", sessionId);
   }
-  return request<DocumentSummary>("/api/documents/upload", "POST", formData, token);
+  return request<DocumentSummary>("/api/documents/upload", "POST", formData, token, { timeoutMs: 45000 });
 }
 
 export function fetchSessionDocuments(sessionId: string, token: string) {

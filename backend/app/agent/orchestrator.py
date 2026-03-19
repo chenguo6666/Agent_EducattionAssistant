@@ -6,7 +6,7 @@ from typing import Any
 
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.schemas.chat import AgentTraceItem, ChatResult, TaskStage, ToolCallItem
 from app.schemas.document import DocumentSummaryResponse, RetrievedChunkResponse
 from app.services.document_service import DocumentService
-from app.services.gemini_service import GeminiService, RouteDecision
+from app.services.llm_service import LLMService
 from app.services.retrieval_service import RetrievalService
 from app.services.status import STATUS_ANALYZING, STATUS_COMPLETED, STATUS_EXECUTING, STATUS_FAILED, STATUS_SUBMITTED
 
@@ -50,10 +50,10 @@ class AgentExecutionResult(BaseModel):
 class AgentOrchestrator:
     def __init__(self) -> None:
         self.planner = TaskPlanner()
-        self.gemini_service = GeminiService()
+        self.llm_service = LLMService()
         self.retrieval_service = RetrievalService()
         self.document_service = DocumentService()
-        self.model_name = settings.gemini_model.strip() or "gemini-2.5-flash"
+        self.model_name = settings.llm_model.strip() or settings.gemini_model.strip() or "Pro/Qwen/Qwen2.5-7B-Instruct"
 
     def run(
         self,
@@ -73,7 +73,7 @@ class AgentOrchestrator:
             material_text=material_text,
             used_documents=used_documents,
             recent_messages=recent_messages,
-            gemini_service=self.gemini_service,
+            llm_service=self.llm_service,
             retrieval_service=self.retrieval_service,
             document_service=self.document_service,
         )
@@ -81,7 +81,7 @@ class AgentOrchestrator:
         plan = self._route_message(context)
 
         if plan.intent == "unknown":
-            if self.gemini_service.is_available:
+            if self.llm_service.is_available:
                 try:
                     return self._run_langchain_agent(toolbox=toolbox, context=context)
                 except Exception:
@@ -95,10 +95,10 @@ class AgentOrchestrator:
         if explicit_plan.intent != "unknown":
             return explicit_plan
 
-        if not self.gemini_service.is_available:
+        if not self.llm_service.is_available:
             return PlanResult(intent="assistant_chat", steps=self.planner.build_steps_for_intent("assistant_chat"))
 
-        decision = self.gemini_service.classify_task(
+        decision = self.llm_service.classify_task(
             message=context.message,
             has_material=bool(context.used_documents),
             history_messages=context.recent_messages,
@@ -114,14 +114,14 @@ class AgentOrchestrator:
 
     def _run_langchain_agent(self, toolbox: EducationToolbox, context: AgentExecutionContext) -> AgentExecutionResult:
         collector = AgentTraceCollector()
-        llm = ChatGoogleGenerativeAI(
+        llm = ChatOpenAI(
             model=self.model_name,
-            api_key=settings.gemini_api_key,
+            api_key=settings.llm_api_key or settings.gemini_api_key,
+            base_url=settings.llm_base_url,
             temperature=0.2,
             request_timeout=12,
-            retries=1,
+            max_retries=1,
             max_tokens=800,
-            thinking_budget=0,
         )
         tools = toolbox.build_langchain_tools()
         prompt = ChatPromptTemplate.from_messages(
@@ -234,8 +234,7 @@ class AgentOrchestrator:
             return output
 
         if plan.intent == "summary_and_quiz":
-            run_tool("summarize_material", task=context.message)
-            run_tool("generate_quiz", task=context.message, count=infer_quiz_count(context.message))
+            run_tool("generate_summary_and_quiz", task=context.message, count=infer_quiz_count(context.message))
         elif plan.intent == "summary":
             run_tool("summarize_material", task=context.message)
         elif plan.intent == "quiz":
@@ -259,7 +258,7 @@ class AgentOrchestrator:
             else:
                 context.result_bundle["answer"] = "当前会话还没有挂载资料。你可以先点击 + 上传文件，然后再让我根据资料处理任务。"
         else:
-            answer = self.gemini_service.chat(message=context.message, history_messages=context.recent_messages)
+            answer = self.llm_service.chat(message=context.message, history_messages=context.recent_messages)
             if not answer:
                 answer = "我可以帮你完成学习问答、资料总结、知识点提取、复习提纲和选择题生成。请继续描述你的任务。"
             context.result_bundle["answer"] = answer
@@ -322,6 +321,8 @@ class AgentOrchestrator:
             return raw_intent
 
         tool_names = [item["toolName"] if isinstance(item, dict) else item.toolName for item in tool_calls]
+        if "generate_summary_and_quiz" in tool_names:
+            return "summary_and_quiz"
         if "summarize_material" in tool_names and "generate_quiz" in tool_names:
             return "summary_and_quiz"
         if "extract_key_points" in tool_names:

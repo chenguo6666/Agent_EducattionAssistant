@@ -20,11 +20,11 @@
 - 前端：Vue 3、Vite、TypeScript、Vue Router、Pinia
 - 后端：FastAPI、SQLAlchemy、SQLite、Uvicorn
 - Agent 层：LangChain Tool Calling Agent + 6 个预设工具 + fallback 规划
-- AI 能力：Gemini `generateContent`、`ChatGoogleGenerativeAI` 与 `text-embedding-004`
+- AI 能力：硅基流动 OpenAI 兼容接口、Qwen `Pro/Qwen/Qwen2.5-7B-Instruct`、LangChain `ChatOpenAI`
 - 文档处理：`pypdf`、`python-docx`
 
 说明：
-- 如果本地配置了 `GEMINI_API_KEY`，系统会优先使用 Gemini 生成摘要、题目、问答与向量嵌入。
+- 如果本地配置了 `LLM_API_KEY`，系统会优先使用硅基流动上的 Qwen 模型生成摘要、题目、问答与任务分类。
 - 如果没有配置，系统会自动回退到本地 Mock 工具和关键词检索，保证主流程仍然可运行。
 
 ## 当前能力清单
@@ -143,8 +143,12 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   - `ACCESS_TOKEN_EXPIRE_MINUTES`
   - `DATABASE_URL`
   - `UPLOADS_DIR`
-  - `GEMINI_API_KEY`
-  - `GEMINI_MODEL`
+  - `LLM_API_KEY`
+  - `LLM_MODEL`
+  - `LLM_BASE_URL`
+  - `EMBEDDING_API_KEY`
+  - `EMBEDDING_MODEL`
+  - `EMBEDDING_BASE_URL`
 
 参考样例：
 

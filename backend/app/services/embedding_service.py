@@ -10,8 +10,9 @@ class EmbeddingService:
     max_document_embeddings = 12
 
     def __init__(self) -> None:
-        self.api_key = settings.gemini_api_key.strip()
-        self.model = "text-embedding-004"
+        self.api_key = settings.embedding_api_key.strip()
+        self.model = settings.embedding_model.strip()
+        self.base_url = settings.embedding_base_url.strip()
 
     @property
     def is_available(self) -> bool:
@@ -45,19 +46,18 @@ class EmbeddingService:
         return numerator / (left_norm * right_norm)
 
     def _embed(self, text: str, task_type: str) -> list[float] | None:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:embedContent"
+        if not self.api_key or not self.model or not self.base_url:
+            return None
+        url = f"{self.base_url.rstrip('/')}/embeddings"
         payload = json.dumps(
             {
-                "model": f"models/{self.model}",
-                "taskType": task_type,
-                "content": {
-                    "parts": [{"text": text[:8000]}],
-                },
+                "model": self.model,
+                "input": text[:8000],
             }
         ).encode("utf-8")
         headers = {
             "Content-Type": "application/json",
-            "x-goog-api-key": self.api_key,
+            "Authorization": f"Bearer {self.api_key}",
         }
         http_request = request.Request(url=url, data=payload, headers=headers, method="POST")
 
@@ -67,8 +67,8 @@ class EmbeddingService:
         except (error.URLError, TimeoutError, JSONDecodeError):
             return None
 
-        embedding = data.get("embedding", {})
-        values = embedding.get("values", [])
+        items = data.get("data", [])
+        values = items[0].get("embedding", []) if items and isinstance(items[0], dict) else []
         if not isinstance(values, list) or not values:
             return None
         return [float(value) for value in values]

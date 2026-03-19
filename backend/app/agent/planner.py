@@ -52,21 +52,8 @@ class TaskPlanner:
         "哪些原因",
     ]
 
-    document_check_keywords = [
-        "文件",
-        "文档",
-        "资料",
-        "上传",
-        "看到",
-        "看见",
-        "查看",
-        "读取",
-        "识别",
-        "能看",
-        "能查看",
-        "能读到",
-        "有没有看到",
-    ]
+    document_reference_keywords = ["文件", "文档", "资料", "上传"]
+    document_check_action_keywords = ["看到", "看见", "查看", "读取", "识别", "能看", "能否查看", "能读到", "有没有看到"]
 
     greeting_keywords = [
         "你好",
@@ -89,14 +76,18 @@ class TaskPlanner:
         has_key_points = self._contains_any(message, self.key_point_keywords)
         has_outline = self._contains_any(message, self.outline_keywords)
         has_quiz = self._contains_any(message, self.quiz_keywords) or "quiz" in lowered
-        has_document_check = has_material and self._contains_any(message, self.document_check_keywords)
+        has_document_check = (
+            has_material
+            and self._contains_any(message, self.document_reference_keywords)
+            and self._contains_any(message, self.document_check_action_keywords)
+        )
         references_material = has_material and self._contains_any(message, self.explicit_material_question_keywords)
         followup_material_question = has_material and self._contains_any(message, self.followup_material_question_keywords)
         has_question = self._contains_any(message, self.question_keywords)
         is_greeting = self._contains_any(lowered, [item.lower() for item in self.greeting_keywords])
 
         if has_summary and has_quiz:
-            return PlanResult(intent="summary_and_quiz", steps=["识别任务类型：总结+出题", "调用摘要工具", "调用出题工具"])
+            return PlanResult(intent="summary_and_quiz", steps=["识别任务类型：总结+出题", "调用综合任务工具"])
         if has_key_points:
             return PlanResult(intent="key_points", steps=["识别任务类型：知识点提取", "调用知识点工具"])
         if has_outline:
@@ -119,7 +110,7 @@ class TaskPlanner:
             "document_check": ["识别任务类型：资料确认", "检查当前会话资料", "返回资料可见性结果"],
             "summary": ["识别任务类型：总结", "调用摘要工具"],
             "quiz": ["识别任务类型：出题", "调用出题工具"],
-            "summary_and_quiz": ["识别任务类型：总结+出题", "调用摘要工具", "调用出题工具"],
+            "summary_and_quiz": ["识别任务类型：总结+出题", "调用综合任务工具"],
             "key_points": ["识别任务类型：知识点提取", "调用知识点工具"],
             "study_outline": ["识别任务类型：复习提纲", "调用提纲工具"],
             "rag_answer": ["识别任务类型：资料追问", "检索相关资料片段", "生成基于资料的回答"],

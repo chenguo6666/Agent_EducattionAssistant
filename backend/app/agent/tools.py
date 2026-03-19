@@ -8,14 +8,16 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.models.document_chunk import DocumentChunk
 from app.schemas.document import DocumentSummaryResponse, RetrievedChunkResponse
 from app.services.document_service import DocumentService
-from app.services.gemini_service import GeminiService
+from app.services.llm_service import LLMService
 from app.services.retrieval_service import RetrievalService
 from app.tools.quiz_tool import generate_quiz
 from app.tools.summary_tool import summarize_text
 
 TOOL_DISPLAY_NAMES: dict[str, str] = {
+    "generate_summary_and_quiz": "综合任务工具",
     "summarize_material": "摘要工具",
     "generate_quiz": "出题工具",
     "extract_key_points": "知识点工具",
@@ -56,7 +58,7 @@ def summarize_payload(value: Any, limit: int = 140) -> str:
 
 
 def infer_quiz_count(message: str, default: int = 5) -> int:
-    matched = re.search(r"(\d+)\s*个?选择题", message)
+    matched = re.search(r"(\d+)\s*个?\s*(选择题|题目)", message)
     if matched:
         return max(1, min(int(matched.group(1)), 10))
     digit_match = re.search(r"(\d+)", message)
@@ -74,27 +76,21 @@ class AgentExecutionContext:
     material_text: str
     used_documents: list[DocumentSummaryResponse]
     recent_messages: list[str]
-    gemini_service: GeminiService
+    llm_service: LLMService
     retrieval_service: RetrievalService
     document_service: DocumentService
     retrieved_chunks: list[RetrievedChunkResponse] = field(default_factory=list)
     retrieved_context_text: str = ""
-    result_bundle: dict[str, Any] = field(
-        default_factory=lambda: {
-            "summary": None,
-            "quiz": None,
-            "answer": None,
-        }
-    )
+    result_bundle: dict[str, Any] = field(default_factory=lambda: {"summary": None, "quiz": None, "answer": None})
 
 
 class SummarizeMaterialArgs(BaseModel):
-    task: str = Field(description="用户当前的总结类任务描述")
+    task: str = Field(description="用户当前的总结任务描述")
 
 
 class GenerateQuizArgs(BaseModel):
     task: str = Field(description="用户当前的出题任务描述")
-    count: int = Field(default=5, ge=1, le=10, description="需要生成的选择题数量")
+    count: int = Field(default=5, ge=1, le=10, description="需要生成的题目数量")
 
 
 class ExtractKeyPointsArgs(BaseModel):
@@ -130,7 +126,7 @@ class EducationToolbox:
             StructuredTool.from_function(
                 func=self.generate_quiz,
                 name="generate_quiz",
-                description="基于当前会话资料生成选择题，适用于练习题和测验任务。",
+                description="基于当前会话资料生成选择题，适用于练习题和考试准备任务。",
                 args_schema=GenerateQuizArgs,
             ),
             StructuredTool.from_function(
@@ -160,26 +156,40 @@ class EducationToolbox:
         ]
 
     def summarize_material(self, task: str) -> dict[str, Any]:
-        material = self._get_material_text()
-        summary = self.context.gemini_service.summarize(task=task, material=material) or summarize_text(material)
+        material = self._build_generation_material(task=task)
+        summary = self.context.llm_service.summarize(task=task, material=material) or summarize_text(material)
         self.context.result_bundle["summary"] = summary
         return {"summary": summary}
 
+    def generate_summary_and_quiz(self, task: str, count: int = 5) -> dict[str, Any]:
+        material = self._build_generation_material(task=task)
+        combined = self.context.llm_service.generate_summary_and_quiz(task=task, material=material, count=count)
+        if combined:
+            summary, quiz = combined
+        else:
+            summary = self.context.llm_service.summarize(task=task, material=material) or summarize_text(material)
+            quiz_material = summary if summary else material
+            quiz = self.context.llm_service.generate_quiz(task=task, material=quiz_material, count=count) or generate_quiz(quiz_material, count=count)
+
+        self.context.result_bundle["summary"] = summary
+        self.context.result_bundle["quiz"] = quiz
+        return {"summary": summary, "quiz": quiz}
+
     def generate_quiz(self, task: str, count: int = 5) -> dict[str, Any]:
-        material = self._get_material_text(prefer_summary=True)
-        quiz = self.context.gemini_service.generate_quiz(task=task, material=material, count=count) or generate_quiz(material, count=count)
+        material = self._build_generation_material(task=task, prefer_summary=True)
+        quiz = self.context.llm_service.generate_quiz(task=task, material=material, count=count) or generate_quiz(material, count=count)
         self.context.result_bundle["quiz"] = quiz
         return {"quiz": quiz}
 
     def extract_key_points(self, task: str, count: int = 6) -> dict[str, Any]:
-        material = self._get_material_text()
-        answer = self.context.gemini_service.extract_key_points(task=task, material=material, count=count) or self._build_local_key_points(material, count)
+        material = self._build_generation_material(task=task)
+        answer = self.context.llm_service.extract_key_points(task=task, material=material, count=count) or self._build_local_key_points(material, count)
         self.context.result_bundle["answer"] = answer
         return {"answer": answer}
 
     def build_study_outline(self, task: str) -> dict[str, Any]:
-        material = self._get_material_text()
-        answer = self.context.gemini_service.build_study_outline(task=task, material=material) or self._build_local_outline(material)
+        material = self._build_generation_material(task=task)
+        answer = self.context.llm_service.build_study_outline(task=task, material=material) or self._build_local_outline(material)
         self.context.result_bundle["answer"] = answer
         return {"answer": answer}
 
@@ -199,48 +209,109 @@ class EducationToolbox:
         }
 
     def answer_with_context(self, question: str) -> dict[str, Any]:
-        context_text = self.context.retrieved_context_text or self._get_material_text()
-        answer = self.context.gemini_service.answer_question(question=question, context=context_text) or self._build_local_answer(question)
+        context_text = self.context.retrieved_context_text or self._build_generation_material(task=question)
+        answer = self.context.llm_service.answer_question(question=question, context=context_text) or self._build_local_answer(question, context_text)
         self.context.result_bundle["answer"] = answer
         return {"answer": answer}
 
-    def _get_material_text(self, prefer_summary: bool = False) -> str:
+    def _build_generation_material(self, task: str, prefer_summary: bool = False) -> str:
         summary = self.context.result_bundle.get("summary")
         if prefer_summary and isinstance(summary, str) and summary.strip():
             return summary
         if self.context.retrieved_context_text.strip():
             return self.context.retrieved_context_text
+
+        focused_context = self._retrieve_private_context(task=task)
+        if focused_context:
+            return focused_context
+
         if self.context.material_text.strip():
             return self.context.material_text
         return self.context.message
 
+    def _retrieve_private_context(self, task: str, top_k: int = 6) -> str:
+        if not self.context.used_documents:
+            return ""
+
+        try:
+            chunks = self.context.retrieval_service.retrieve(
+                db=self.context.db,
+                user_id=self.context.user_id,
+                session_id=self.context.session_id,
+                query=task,
+                top_k=top_k,
+            )
+        except Exception:
+            chunks = []
+
+        parts = [chunk.content for chunk in chunks if chunk.content.strip()]
+        if len(parts) < 3:
+            parts.extend(self._sample_session_chunks(limit=max(top_k - len(parts), 0)))
+
+        normalized_parts: list[str] = []
+        seen: set[str] = set()
+        for part in parts:
+            normalized = " ".join(part.split()).strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            normalized_parts.append(normalized)
+
+        return "\n\n".join(normalized_parts[:top_k]).strip()
+
+    def _sample_session_chunks(self, limit: int = 4) -> list[str]:
+        if limit <= 0:
+            return []
+
+        rows = (
+            self.context.db.query(DocumentChunk.content)
+            .filter(DocumentChunk.session_id == self.context.session_id, DocumentChunk.user_id == self.context.user_id)
+            .order_by(DocumentChunk.chunk_index.asc(), DocumentChunk.id.asc())
+            .limit(max(limit * 2, 8))
+            .all()
+        )
+        sampled: list[str] = []
+        for row in rows:
+            content = row[0].strip()
+            if len(content) < 20:
+                continue
+            sampled.append(content)
+            if len(sampled) >= limit:
+                break
+        return sampled
+
+    def _extract_candidate_points(self, material: str, limit: int) -> list[str]:
+        normalized = re.sub(r"\s+", " ", material.replace("\r", "\n")).strip()
+        sentences = re.split(r"[。！？；\n]", normalized)
+        picked: list[str] = []
+        for sentence in sentences:
+            cleaned = sentence.replace("核心内容：", "").replace("-", " ").strip(" -:：;；,.，、")
+            if len(cleaned) < 8:
+                continue
+            if cleaned in picked:
+                continue
+            picked.append(cleaned)
+            if len(picked) >= limit:
+                break
+        return picked
+
     def _build_local_key_points(self, material: str, count: int) -> str:
-        sentences = re.split(r"[。！？；\n]", material)
-        picked = [sentence.strip() for sentence in sentences if sentence.strip()][:count]
-        if not picked:
-            return "1. 当前内容较短，建议先明确学科与知识点范围。"
-        return "\n".join(f"{index + 1}. {sentence}" for index, sentence in enumerate(picked))
+        points = self._extract_candidate_points(material, count)
+        if not points:
+            return "1. 当前资料信息较少，建议补充更完整的学习内容。\n2. 可以尝试先让我总结资料，再继续提取知识点。"
+        return "\n".join(f"{index + 1}. {point}" for index, point in enumerate(points))
 
     def _build_local_outline(self, material: str) -> str:
-        sentences = re.split(r"[。！？；\n]", material)
-        picked = [sentence.strip() for sentence in sentences if sentence.strip()][:4]
-        if not picked:
-            return "一、明确复习范围\n二、整理重点概念\n三、完成练习巩固\n四、回顾错题"
-        return "\n".join(
-            [
-                "一、核心主题",
-                *[f"{index + 1}. {sentence}" for index, sentence in enumerate(picked)],
-                "二、复习建议\n1. 先回顾概念\n2. 再完成练习\n3. 最后总结错题",
-            ]
-        )
+        points = self._extract_candidate_points(material, 4)
+        if not points:
+            return "一、核心内容梳理\n1. 明确资料主题\n2. 提炼主要观点\n\n二、复习建议\n1. 先整体浏览\n2. 再按主题回顾"
+        outline_lines = ["一、核心主题"]
+        outline_lines.extend(f"{index + 1}. {point}" for index, point in enumerate(points))
+        outline_lines.extend(["", "二、复习建议", "1. 先按主题理解整体结构", "2. 再结合题目练习巩固重点", "3. 最后回顾易混淆内容"])
+        return "\n".join(outline_lines)
 
-    def _build_local_answer(self, question: str) -> str:
-        if self.context.retrieved_chunks:
-            lines = []
-            for chunk in self.context.retrieved_chunks[:3]:
-                excerpt = chunk.content
-                if len(excerpt) > 100:
-                    excerpt = f"{excerpt[:100]}..."
-                lines.append(f"- {chunk.fileName}: {excerpt}")
-            return f"根据当前资料，和“{question}”最相关的信息如下：\n" + "\n".join(lines)
-        return self.context.gemini_service.chat(message=question, history_messages=self.context.recent_messages) or "我可以继续帮你细化这个问题，请补充更具体的学科、资料或目标。"
+    def _build_local_answer(self, question: str, context_text: str) -> str:
+        points = self._extract_candidate_points(context_text, 3)
+        if not points:
+            return self.context.llm_service.chat(message=question, history_messages=self.context.recent_messages) or "我可以继续帮你细化这个问题，请补充更具体的资料或目标。"
+        return "根据当前资料，可以先关注以下几点：\n" + "\n".join(f"- {point}" for point in points)

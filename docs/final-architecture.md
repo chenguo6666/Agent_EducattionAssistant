@@ -20,13 +20,13 @@ flowchart LR
     A --> D["DocumentService"]
     C --> R["RetrievalService"]
     R --> E["EmbeddingService"]
-    C --> G["GeminiService"]
+    C --> G["LLMService"]
     C --> T["本地工具: Summary / Quiz"]
     S --> DB["SQLite"]
     D --> DB
     C --> DB
-    E --> GM["Gemini Embedding API"]
-    G --> GG["Gemini GenerateContent API"]
+    E --> GM["可选 Embedding API"]
+    G --> GG["SiliconFlow Chat Completions API"]
 ```
 
 ## 3. 前端架构
@@ -83,12 +83,12 @@ flowchart LR
   - 关键词召回
   - 向量相似度计算
   - rerank 与上下文拼接
-- `GeminiService`
+- `LLMService`
   - 摘要
   - 题目生成
   - 基于资料问答
 - `EmbeddingService`
-  - Gemini 向量嵌入
+- 可选向量嵌入
   - 查询向量与文档向量余弦相似度
 - `ExportService`
   - Markdown 结果导出
@@ -130,7 +130,7 @@ sequenceDiagram
     participant API as FastAPI
     participant Chat as ChatService
     participant Ret as RetrievalService
-    participant AI as Gemini / 本地工具
+    participant AI as Qwen / 本地工具
     participant DB as SQLite
 
     User->>FE: 输入教育任务
@@ -152,7 +152,7 @@ sequenceDiagram
 本项目没有直接上重量级向量数据库，而是采用“课程项目可控实现”：
 
 - 文档上传后先抽取文本并分块
-- 每个 chunk 保存关键词与 Gemini 向量
+- 每个 chunk 保存关键词与可选向量
 - 查询时同时计算：
   - 关键词重叠分数
   - 向量相似度分数
@@ -169,7 +169,7 @@ sequenceDiagram
 
 项目设计了多层回退，避免因为外部模型能力波动导致系统不可演示：
 
-- 没有 `GEMINI_API_KEY`
+- 没有 `LLM_API_KEY`
   - 不做向量嵌入
   - 检索退化为关键词召回
   - 摘要、题目、问答退化为本地工具或规则输出

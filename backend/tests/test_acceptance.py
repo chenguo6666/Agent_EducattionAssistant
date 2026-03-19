@@ -5,6 +5,8 @@ import uuid
 from fastapi.testclient import TestClient
 
 os.environ["GEMINI_API_KEY"] = ""
+os.environ["LLM_API_KEY"] = ""
+os.environ["EMBEDDING_API_KEY"] = ""
 
 from app.main import app
 
@@ -93,9 +95,8 @@ class AcceptanceTestCase(unittest.TestCase):
         self.assertEqual(len(summary_payload["result"]["quiz"]), 5)
         self.assertTrue(summary_payload["recordId"])
         self.assertGreaterEqual(len(summary_payload["agentTrace"]), 3)
-        self.assertGreaterEqual(len(summary_payload["toolCalls"]), 2)
-        self.assertEqual(summary_payload["toolCalls"][0]["toolName"], "summarize_material")
-        self.assertEqual(summary_payload["toolCalls"][1]["toolName"], "generate_quiz")
+        self.assertGreaterEqual(len(summary_payload["toolCalls"]), 1)
+        self.assertEqual(summary_payload["toolCalls"][0]["toolName"], "generate_summary_and_quiz")
 
         export_response = self.client.get(f"/api/chat/records/{summary_payload['recordId']}/export", headers=headers)
         self.assertEqual(export_response.status_code, 200)

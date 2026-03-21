@@ -1,17 +1,10 @@
 ﻿<template>
   <main class="auth-layout">
-    <ToastNotification
-      :visible="toastVisible"
-      :message="toastMessage"
-      :type="toastType"
-      @close="toastVisible = false"
-    />
-    
     <section class="auth-card">
       <div>
-        <p class="eyebrow">Sprint 1 / MVP</p>
+        <p class="eyebrow">Education Agent</p>
         <h1>教育助手 AI Agent</h1>
-        <p class="muted">先完成登录与基础对话链路，后续再接入完整 Agent 能力。</p>
+        <p class="muted">上传学习资料后即可进行总结、出题、资料追问与错题整理。</p>
       </div>
 
       <form class="auth-form" @submit.prevent="handleSubmit">
@@ -42,6 +35,8 @@
         </button>
       </form>
 
+      <p v-if="feedback" class="feedback" :class="{ success: feedbackType === 'success' }">{{ feedback }}</p>
+
       <button class="secondary-button" type="button" @click="toggleMode">
         {{ isRegister ? "已有账号，去登录" : "没有账号，去注册" }}
       </button>
@@ -54,28 +49,14 @@ import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { login, register } from "@/api/auth";
 import { useAuthStore } from "@/stores/auth";
-import ToastNotification from "@/components/ToastNotification.vue";
 
 const router = useRouter();
 const authStore = useAuthStore();
 
 const isRegister = ref(false);
 const submitting = ref(false);
-
-// Toast state
-const toastVisible = ref(false);
-const toastMessage = ref("");
-const toastType = ref<"success" | "error" | "info">("info");
-
-function showToast(message: string, type: "success" | "error" | "info" = "info") {
-  toastMessage.value = message;
-  toastType.value = type;
-  toastVisible.value = true;
-}
-
-function hideToast() {
-  toastVisible.value = false;
-}
+const feedback = ref("");
+const feedbackType = ref<"error" | "success">("error");
 
 const form = reactive({
   account: "student1",
@@ -84,9 +65,14 @@ const form = reactive({
   password: "123456",
 });
 
+function resetFeedback() {
+  feedback.value = "";
+  feedbackType.value = "error";
+}
+
 function toggleMode() {
-  hideToast();
   isRegister.value = !isRegister.value;
+  resetFeedback();
 }
 
 async function loginAndRedirect(account: string, password: string) {
@@ -95,53 +81,36 @@ async function loginAndRedirect(account: string, password: string) {
     password,
   });
   authStore.setSession(response);
-  // Store login success flag for ChatPage to show toast
-  sessionStorage.setItem('loginSuccess', 'true');
   await router.push("/chat");
 }
 
 async function handleSubmit() {
   submitting.value = true;
-  hideToast();
+  resetFeedback();
 
   try {
     if (isRegister.value) {
-      // Registration - set flag before redirecting
       await register({
         username: form.username,
         phone: form.phone,
         password: form.password,
       });
-      sessionStorage.setItem('registerSuccess', 'true');
-      isRegister.value = false;
+      feedback.value = "注册成功，正在进入工作台...";
+      feedbackType.value = "success";
       form.account = form.username;
-      showToast("注册成功！请登录", "success");
-      
+      await loginAndRedirect(form.username, form.password);
     } else {
-      // Login
       await loginAndRedirect(form.account, form.password);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "操作失败";
-    showToast(message, "error");
+    feedback.value = error instanceof Error ? error.message : "操作失败";
+    feedbackType.value = "error";
   } finally {
     submitting.value = false;
   }
 }
 
 onMounted(() => {
-  // Check if user just logged in
-  if (sessionStorage.getItem('loginSuccess') === 'true') {
-    sessionStorage.removeItem('loginSuccess');
-    showToast("登录成功！", "success");
-  }
-  
-  // Check if user just registered
-  if (sessionStorage.getItem('registerSuccess') === 'true') {
-    sessionStorage.removeItem('registerSuccess');
-    showToast("注册成功！请登录", "success");
-  }
-  
   if (authStore.isAuthenticated) {
     router.replace("/chat");
   }

@@ -21,6 +21,7 @@ function Wait-ForUrl {
 
 Wait-ForUrl -Url "http://127.0.0.1:8000/health"
 Wait-ForUrl -Url "http://127.0.0.1:5173"
+Wait-ForUrl -Url "http://127.0.0.1:6333/collections"
 
 $suffix = Get-Date -Format "HHmmss"
 $phoneSuffix = "{0:D10}" -f (Get-Random -Minimum 0 -Maximum 10000000000)
@@ -52,6 +53,7 @@ $chatResponse = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/chat/execute" 
     RegisterMessage = $registerResponse.message
     LoginUser = $loginResponse.user.username
     MeUser = $meResponse.username
+    QdrantReady = $true
     ChatIntent = $chatResponse.intent
     ChatStatus = $chatResponse.status
     QuizCount = @($chatResponse.result.quiz).Count

@@ -1,78 +1,109 @@
 # 教育助手 AI Agent
 
-一个面向课程项目的全栈 Web 应用。用户在前端输入高层级教育任务，例如“总结这篇历史课文并生成 5 个选择题”，后端 Agent 负责识别意图、拆解任务、调用模拟工具，并将执行结果和状态反馈给前端。
+一个面向课程项目交付的全栈 Web 应用。用户可以登录后上传学习资料，向 Agent 提交高层级教育任务，例如“总结这份历史资料并生成 5 道选择题”或“根据当前资料回答工业革命带来的社会问题”。系统会完成任务识别、执行规划、工具调用、检索增强和结果整理，并在前端展示执行状态、资料来源、错题记录与可导出的结果。
 
-当前仓库阶段：Sprint 1 收尾。
+当前仓库状态：已完成 Sprint 1、Sprint 2 与 Sprint 3 的核心开发，进入最终交付整理阶段。
 
-## 1. 项目目标
+## 项目亮点
 
-- 理解 AI Agent 的基本工作流：接收任务、规划、工具调用、结果整合。
-- 完成一个可演示的教育场景 Agent Web 应用。
-- 以 Scrum 形式推进，分 3 个 Sprint 逐步迭代。
+- 登录注册与 JWT 鉴权
+- 会话历史与任务记录持久化
+- 上传资料并自动抽取文本
+- 文档分块、混合检索、追问式轻量 RAG
+- 摘要、题目生成、资料问答、复习提纲等教育场景任务
+- 结构化结果展示、来源片段展示、Markdown 导出
+- 错题整理与最近错题本
+- Windows 下的一键本地联调与公网临时分享脚本
 
-## 2. 技术选型
+## 技术栈
 
-- 前端：Vue 3 + Vite + TypeScript + Vue Router
-- 状态管理：Pinia
-- Markdown 渲染：`markdown-it`
-- 后端：FastAPI + Pydantic + Uvicorn
-- Agent：LangChain
-- 认证：JWT
-- 存储：SQLite
+- 前端：Vue 3、Vite、TypeScript、Vue Router、Pinia
+- 后端：FastAPI、SQLAlchemy、SQLite、Uvicorn
+- Agent 层：LangChain Tool Calling Agent + 6 个预设工具 + fallback 规划
+- AI 能力：硅基流动 OpenAI 兼容接口、Qwen `Pro/Qwen/Qwen2.5-7B-Instruct`、LangChain `ChatOpenAI`
+- 文档处理：`pypdf`、`python-docx`
 
-选择 `FastAPI` 而不是 `Spring Boot` 的原因：
+说明：
+- 如果本地配置了 `LLM_API_KEY`，系统会优先使用硅基流动上的 Qwen 模型生成摘要、题目、问答与任务分类。
+- 如果没有配置，系统会自动回退到本地 Mock 工具和关键词检索，保证主流程仍然可运行。
 
-- LangChain 与 Python 生态集成更直接。
-- Mock Tool、Prompt、Agent 编排实现成本更低。
-- 对课程项目更利于在有限时间内交付可演示版本。
+## 当前能力清单
 
-## 3. Sprint 规划摘要
+### 用户与会话
 
-- Sprint 1：完成登录、对话界面、Agent 核心逻辑、任务状态反馈、基础联调
-- Sprint 2：增加工具执行过程展示、参数化控制、模板任务、内容导出、异常提示
-- Sprint 3：增加文件上传、简单 RAG、多轮记忆、错题推荐、重新生成
-
-## 4. Sprint 1 MVP 范围
-
-- 用户注册/登录
+- 注册、登录、获取当前用户
 - 登录态持久化
-- 类 ChatGPT 的对话输入区与结果展示区
-- Markdown 结果渲染
-- Agent 基础流程
-- 两个 Mock Tool：
-  - 摘要工具
-  - 出题工具
-- 任务状态流转：
-  - `submitted`
-  - `analyzing`
-  - `executing`
-  - `completed`
-  - `failed`
+- 会话列表、历史任务回放
+- 新建会话与会话标题自动生成
 
-## 5. 当前文档
+### Agent 与教育任务
 
-- [项目准备说明](E:/project/codex/Agent_EducattionAssistant/docs/project-preparation.md)
-- [Sprint1 执行计划](E:/project/codex/Agent_EducattionAssistant/docs/sprint1-plan.md)
-- [Sprint1 演示脚本](E:/project/codex/Agent_EducattionAssistant/docs/sprint1-demo-script.md)
-- [Sprint1 验收清单](E:/project/codex/Agent_EducattionAssistant/docs/sprint1-acceptance.md)
+- 任务意图识别：`assistant_chat`、`summary`、`quiz`、`summary_and_quiz`、`key_points`、`study_outline`、`rag_answer`
+- 聊天框内联展示：`任务已提交 / 分析中 / 执行中 / 完成`、任务意图、工具调用轨迹
+- 结构化摘要结果
+- 多题选择题生成与提交作答
+- 基于当前资料的追问式问答
 
-## 6. 当前完成度
+### 资料与 RAG
 
-Sprint 1 当前已完成的能力：
+- 支持上传 `txt`、`md`、`pdf`、`docx`
+- 文本抽取与文档分块持久化
+- 关键词召回 + 向量相似度混合检索
+- chunk rerank 与来源片段回显
+- 会话级资料上下文自动挂载
 
-- 注册/登录与 JWT 鉴权
-- 登录态校验与 `/api/auth/me`
-- 对话工作台
-- Agent 阶段展示与执行计划展示
-- Mock 摘要工具与出题工具
-- 结构化结果卡片与错误卡片
-- 预设任务模板
-- Windows 下的一键联调启动与检查脚本
-- 后端最小自动化验收测试
+### 学习辅助
 
-## 7. 本地启动
+- 任务结果导出为 Markdown
+- 答题后自动记录错题
+- 最近错题本侧栏展示
 
-### 前端
+## 系统架构
+
+完整说明见 [docs/final-architecture.md](docs/final-architecture.md)。
+
+系统主链路：
+
+1. 用户在前端登录后进入对话工作台。
+2. 用户可先上传资料，再提交总结、出题或资料追问任务。
+3. 后端为任务绑定会话，读取当前会话资料与最近历史消息。
+4. 检索服务对文档分块执行关键词召回、向量相似度计算与 rerank。
+5. LangChain Agent 识别任务类型，调用摘要、出题、知识点、提纲、检索、资料问答等工具执行。
+6. 结果、来源片段、步骤时间线、错题记录等信息写入数据库并返回前端。
+
+## 目录结构
+
+```text
+frontend/                  Vue 前端
+backend/                   FastAPI 后端
+docs/                      项目说明、计划、验收、架构文档
+scripts/                   本地联调、构建、分享脚本
+uploads/                   本地上传资料目录
+```
+
+## 本地启动
+
+### 方式一：一键联调
+
+```powershell
+.\scripts\dev-up.ps1
+.\scripts\dev-check.ps1
+```
+
+默认地址：
+
+- 前端：`http://127.0.0.1:5173`
+- 后端：`http://127.0.0.1:8000`
+
+停止服务：
+
+```powershell
+.\scripts\dev-down.ps1
+```
+
+### 方式二：手动启动
+
+前端：
 
 ```powershell
 cd frontend
@@ -81,9 +112,7 @@ npm install
 npm run dev
 ```
 
-默认地址：`http://127.0.0.1:5173`
-
-### 后端
+后端：
 
 ```powershell
 cd backend
@@ -94,88 +123,129 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-默认地址：`http://127.0.0.1:8000`
+健康检查：
 
-健康检查：`GET /health`
+- `GET /health`
 
-### 一键联调启动
+## 环境变量
 
-```powershell
-.\scripts\dev-up.ps1
-.\scripts\dev-check.ps1
-.\scripts\dev-down.ps1
-```
+前端：
 
-脚本说明：
+- `frontend/.env`
+  - `VITE_API_BASE_URL`
 
-- [dev-up.ps1](E:/project/codex/Agent_EducattionAssistant/scripts/dev-up.ps1)：后台启动前后端，并把日志写入 `.runtime/logs/`
-- [dev-check.ps1](E:/project/codex/Agent_EducattionAssistant/scripts/dev-check.ps1)：通过真实 HTTP 请求验证注册、登录、鉴权和聊天接口
-- [dev-down.ps1](E:/project/codex/Agent_EducattionAssistant/scripts/dev-down.ps1)：停止 `dev-up` 启动的两个进程
+后端：
 
-## 8. 临时公网访问
+- `backend/.env`
+  - `APP_NAME`
+  - `JWT_SECRET_KEY`
+  - `JWT_ALGORITHM`
+  - `ACCESS_TOKEN_EXPIRE_MINUTES`
+  - `DATABASE_URL`
+  - `UPLOADS_DIR`
+  - `LLM_API_KEY`
+  - `LLM_MODEL`
+  - `LLM_BASE_URL`
+  - `EMBEDDING_API_KEY`
+  - `EMBEDDING_MODEL`
+  - `EMBEDDING_BASE_URL`
 
-如果你需要让队友直接通过链接访问当前版本，可以使用单端口生产模式：
+参考样例：
 
-```powershell
-.\scripts\start-production.ps1
-```
+- [frontend/.env.example](frontend/.env.example)
+- [backend/.env.example](backend/.env.example)
 
-它会先构建前端，再由 FastAPI 直接托管 `frontend/dist`。
+## 核心接口
 
-然后在另一个终端执行：
+认证：
 
-```powershell
-.\scripts\share-public.ps1
-```
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
 
-脚本会通过 `localtunnel` 生成一个临时公网链接。说明：
+会话与任务：
 
-- 这是临时公开访问方案，不是持久云部署
-- 你的电脑和进程必须保持在线，链接才可访问
-- 队友访问时使用 `share-public.ps1` 输出的公网地址
+- `POST /api/chat/execute`
+- `GET /api/chat/sessions`
+- `GET /api/chat/sessions/{session_id}`
+- `GET /api/chat/records/{record_id}/export`
+- `POST /api/chat/records/{record_id}/quiz-attempt`
+- `GET /api/chat/mistakes`
 
-## 9. Sprint 1 验收
+资料：
 
-建议按下面顺序验收：
+- `POST /api/documents/upload`
+- `GET /api/documents/sessions/{session_id}`
 
-1. 运行 [dev-up.ps1](E:/project/codex/Agent_EducattionAssistant/scripts/dev-up.ps1)
-2. 打开前端页面并手工验证登录、注册、模板任务、错误提示
-3. 运行 [dev-check.ps1](E:/project/codex/Agent_EducattionAssistant/scripts/dev-check.ps1)
-4. 运行后端自动化测试
-5. 演示完成后运行 [dev-down.ps1](E:/project/codex/Agent_EducattionAssistant/scripts/dev-down.ps1)
+## 验收与测试
 
-详细清单见：
-
-- [Sprint1 验收清单](E:/project/codex/Agent_EducattionAssistant/docs/sprint1-acceptance.md)
-
-## 10. 演示建议
-
-如果要做课程演示，建议直接按下面文档执行：
-
-- [Sprint1 演示脚本](E:/project/codex/Agent_EducattionAssistant/docs/sprint1-demo-script.md)
-
-## 11. 提交前准备
-
-提交前建议执行：
+前端构建：
 
 ```powershell
 cd frontend
 npm run build
 ```
 
+后端自动化验收：
+
 ```powershell
-cd ..\backend
+cd backend
 .\.venv\Scripts\python -m unittest tests.test_acceptance -v
 ```
 
+当前验收覆盖：
+
+- 注册、登录、当前用户鉴权
+- 错误密码处理
+- 文档上传
+- 摘要 + 出题任务
+- 结果导出
+- 基于资料追问
+- 错题提交与错题本查询
+
+## 演示与分享
+
+如果要以单端口形式运行生产构建：
+
 ```powershell
+.\scripts\start-production.ps1
+```
+
+如果要临时给队友或老师远程访问：
+
+```powershell
+.\scripts\share-public.ps1
+```
+
+当前脚本使用 Cloudflare Quick Tunnel 生成临时公网链接。它适合演示，不适合作为长期部署方案。
+
+## 相关文档
+
+- [docs/project-preparation.md](docs/project-preparation.md)
+- [docs/sprint1-plan.md](docs/sprint1-plan.md)
+- [docs/sprint1-demo-script.md](docs/sprint1-demo-script.md)
+- [docs/sprint1-acceptance.md](docs/sprint1-acceptance.md)
+- [docs/final-architecture.md](docs/final-architecture.md)
+
+## 提交前检查
+
+```powershell
+cd frontend
+npm run build
+cd ..\backend
+.\.venv\Scripts\python -m unittest tests.test_acceptance -v
 cd ..
 .\scripts\dev-down.ps1
 git status --short
 ```
 
-说明：
+不应提交：
 
-- `.runtime/` 已加入忽略，不需要提交联调日志
-- `frontend/dist/`、`node_modules/`、`backend/.venv/` 不应提交
-- `frontend/.env`、`backend/.env`、`.cursorindexingignore` 不应提交
+- `frontend/.env`
+- `backend/.env`
+- `frontend/dist`
+- `backend/.venv`
+- `node_modules`
+- `.runtime`
+- `.cursorindexingignore`
+- Excel 原始需求文件

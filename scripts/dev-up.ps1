@@ -5,6 +5,7 @@ $runtimeDir = Join-Path $repoRoot ".runtime"
 $logsDir = Join-Path $runtimeDir "logs"
 $backendPidFile = Join-Path $runtimeDir "backend.pid"
 $frontendPidFile = Join-Path $runtimeDir "frontend.pid"
+$qdrantScript = Join-Path $repoRoot "scripts\\start-qdrant.ps1"
 
 New-Item -ItemType Directory -Force $runtimeDir | Out-Null
 New-Item -ItemType Directory -Force $logsDir | Out-Null
@@ -24,7 +25,7 @@ function Stop-ExistingProcess {
 
     $process = Get-Process -Id ([int]$pidValue) -ErrorAction SilentlyContinue
     if ($null -ne $process) {
-        Stop-Process -Id $process.Id -Force
+        & taskkill /PID $process.Id /T /F | Out-Null
     }
 
     Remove-Item $PidFile -Force
@@ -32,6 +33,8 @@ function Stop-ExistingProcess {
 
 Stop-ExistingProcess -PidFile $backendPidFile
 Stop-ExistingProcess -PidFile $frontendPidFile
+
+powershell -NoProfile -ExecutionPolicy Bypass -File $qdrantScript | Out-Host
 
 $backendScript = Join-Path $repoRoot "scripts\\start-backend.ps1"
 $frontendScript = Join-Path $repoRoot "scripts\\start-frontend.ps1"
@@ -59,6 +62,7 @@ Write-Output "Backend PID: $($backendProcess.Id)"
 Write-Output "Frontend PID: $($frontendProcess.Id)"
 Write-Output "Backend URL: http://127.0.0.1:8000"
 Write-Output "Frontend URL: http://127.0.0.1:5173"
+Write-Output "Qdrant URL: http://127.0.0.1:6333"
 Write-Output "Backend stdout: $backendLog"
 Write-Output "Backend stderr: $backendErrLog"
 Write-Output "Frontend stdout: $frontendLog"

@@ -4,16 +4,65 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import OperationalError
+from sqlalchemy import inspect, text
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
+from app.api.routes.documents import router as documents_router
 from app.api.routes.health import router as health_router
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import engine
 from app.core.exceptions import register_exception_handlers
-from app.models import task_record, user
+from app.models import chat_session, document_chunk, mistake_record, task_record, uploaded_document, user
 
-Base.metadata.create_all(bind=engine)
+
+def upgrade_sqlite_schema() -> None:
+    inspector = inspect(engine)
+    table_names = inspector.get_table_names()
+
+    if "task_records" in table_names:
+        existing_columns = {column["name"] for column in inspector.get_columns("task_records")}
+        required_columns = {
+            "session_id": "ALTER TABLE task_records ADD COLUMN session_id VARCHAR(36)",
+            "steps_json": "ALTER TABLE task_records ADD COLUMN steps_json JSON DEFAULT '[]' NOT NULL",
+            "timeline_json": "ALTER TABLE task_records ADD COLUMN timeline_json JSON DEFAULT '[]' NOT NULL",
+            "agent_trace_json": "ALTER TABLE task_records ADD COLUMN agent_trace_json JSON DEFAULT '[]' NOT NULL",
+            "tool_calls_json": "ALTER TABLE task_records ADD COLUMN tool_calls_json JSON DEFAULT '[]' NOT NULL",
+            "retrieved_chunks_json": "ALTER TABLE task_records ADD COLUMN retrieved_chunks_json JSON DEFAULT '[]' NOT NULL",
+            "error_message": "ALTER TABLE task_records ADD COLUMN error_message TEXT",
+        }
+
+        with engine.begin() as connection:
+            for column_name, statement in required_columns.items():
+                if column_name not in existing_columns:
+                    try:
+                        connection.execute(text(statement))
+                    except OperationalError as error:
+                        if "duplicate column name" not in str(error).lower():
+                            raise
+
+    if "document_chunks" in table_names:
+        existing_columns = {column["name"] for column in inspector.get_columns("document_chunks")}
+        if "embedding_json" not in existing_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE document_chunks ADD COLUMN embedding_json JSON"))
+
+
+existing_tables = set(inspect(engine).get_table_names())
+for table in (
+    user.User.__table__,
+    chat_session.ChatSession.__table__,
+    task_record.TaskRecord.__table__,
+    uploaded_document.UploadedDocument.__table__,
+    document_chunk.DocumentChunk.__table__,
+    mistake_record.MistakeRecord.__table__,
+):
+    if table.name not in existing_tables:
+        table.create(bind=engine)
+
+upgrade_sqlite_schema()
+Path(settings.uploads_dir).resolve().mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title=settings.app_name)
 register_exception_handlers(app)
@@ -29,6 +78,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(chat_router)
+app.include_router(documents_router)
 
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 

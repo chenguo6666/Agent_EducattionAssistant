@@ -6,6 +6,10 @@ const API_BASE_URL = !rawApiBaseUrl || (!isLocalBrowser && pointsToLocalBackend)
 
 type RequestMethod = "GET" | "POST";
 
+interface RequestOptions {
+  timeoutMs?: number;
+}
+
 function extractErrorMessage(payload: unknown): string {
   if (typeof payload === "string") {
     return payload;
@@ -38,15 +42,38 @@ function extractErrorMessage(payload: unknown): string {
   return "请求失败";
 }
 
-export async function request<T>(path: string, method: RequestMethod, body?: unknown, token?: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+export async function request<T>(
+  path: string,
+  method: RequestMethod,
+  body?: unknown,
+  token?: string,
+  options?: RequestOptions,
+): Promise<T> {
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  const controller = new AbortController();
+  const timeoutMs = options?.timeoutMs ?? 30000;
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: {
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    window.clearTimeout(timeoutId);
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("请求超时，请稍后重试");
+    }
+    throw error;
+  }
+
+  window.clearTimeout(timeoutId);
 
   const contentType = response.headers.get("content-type") ?? "";
   const isJson = contentType.includes("application/json");

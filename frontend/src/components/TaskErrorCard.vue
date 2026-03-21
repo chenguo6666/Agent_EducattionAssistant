@@ -1,7 +1,7 @@
 <template>
   <article class="error-card">
     <header class="error-card-header">
-      <p class="error-card-eyebrow">Agent 输出</p>
+      <p class="error-card-eyebrow">Assistant</p>
       <h3 class="error-card-title">任务执行失败</h3>
     </header>
 

@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="message-bubble" :class="role">
-    <div class="message-role">{{ role === "user" ? "你" : "Agent" }}</div>
+    <div class="message-role">{{ role === "user" ? "You" : "Assistant" }}</div>
     <div class="message-content" v-html="html"></div>
   </div>
 </template>
